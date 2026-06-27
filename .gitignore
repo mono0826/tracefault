@@ -2,12 +2,17 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
-build/
+/dist/
+/build/
 *.egg
 .venv/
 venv/
 env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.pyc
+*.pyo
 
 # IDE
 .idea/
@@ -23,8 +28,20 @@ env/
 # Data
 data/documents/*
 data/vector_store/*
+data/test/*
+data/*.db
+data/*.sqlite
 !data/documents/.gitkeep
 !data/vector_store/.gitkeep
+!data/test/.gitkeep
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Jupyter Notebook
+.ipynb_checkpoints/
 
 # Streamlit
 .streamlit/secrets.toml

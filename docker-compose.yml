@@ -1,23 +1,16 @@
-# version: "3.9"
-
+version: "3.8"
 services:
-  # ── Neo4j 知识图谱数据库 ──────────────────────
   neo4j:
-    image: neo4j:5.26.0
-    container_name: agenthub-neo4j
+    image: neo4j:5.22.0
     ports:
-      - "7474:7474"   # Web UI
-      - "7687:7687"   # Bolt
+      - "7474:7474"
+      - "7687:7687"
     environment:
-      NEO4J_AUTH: neo4j/password
-      NEO4J_PLUGINS: '["apoc"]'
-    volumes:
-      - neo4j_data:/data
-    healthcheck:
-      test: ["CMD", "neo4j", "status"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  neo4j_data:
+      NEO4J_AUTH: "neo4j/12345678"
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*,gds.*"
+      NEO4J_dbms_memory_heap_initial__size: "2G"
+      NEO4J_dbms_memory_heap_max__size: "2G"
+      NEO4J_dbms_memory_pagecache_size: "1G"
+      NEO4J_apoc_trigger_enabled: "true"
+    restart: unless-stopped

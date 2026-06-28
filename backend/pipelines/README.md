@@ -42,7 +42,7 @@ pipelines/
         │  List[Chunk]       ← 每个 Chunk 含 chunk_id / doc_id / content
         ▼
   DocumentProcessor.process()   ← 封装读写+分块，一步到位
-        │  List[Chunk]
+        │  [(file_name, [Chunk, ...]), ...]
         ▼
   下游使用（向量化、检索、索引等）
 ```
@@ -170,7 +170,7 @@ stats = processor.get_file_stats(directory_path="data/test")
 - `file_paths` — 指定文件路径
 - `directory_path` — 扫描目录
 
-**返回**: `List[Chunk]`
+**返回**: `List[Tuple[str, List[Chunk]]]` — `[(file_name, [Chunk, ...]), ...]`
 
 ---
 
@@ -190,8 +190,12 @@ chunks = chunker.chunk_documents(docs)
 ### 一步到位
 ```python
 processor = DocumentProcessor()
-chunks = processor.process(directory_path="data/test")
-# → [Chunk, Chunk, ...]  含 chunk_id / doc_id / content
+file_chunks = processor.process(directory_path="data/test")
+# → [("a.pdf", [Chunk, ...]), ("b.md", [Chunk, ...])]
+
+# 遍历每个文件的 Chunk
+for file_name, chunks in file_chunks:
+    print(f"{file_name}: {len(chunks)} 个 Chunk")
 ```
 
 ### 上传单文件

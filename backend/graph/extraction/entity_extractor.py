@@ -164,7 +164,7 @@ class EntityRelationExtractor:
             if todo:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                     future_to_idx = {
-                        executor.submit(self._process_single_chunk, chunks[i].content): i
+                        executor.submit(self._process_single_chunk, chunks[i]): i
                         for i in todo
                     }
                     for future in concurrent.futures.as_completed(future_to_idx):
@@ -180,7 +180,7 @@ class EntityRelationExtractor:
                             while retry_count < 3:
                                 try:
                                     print(f'尝试重试, 第 {retry_count+1} 次')
-                                    result = self._process_single_chunk(chunks[i].content)
+                                    result = self._process_single_chunk(chunks[i])
                                     ordered[i] = result
                                     self._save_to_cache(chunks[i].chunk_id, result)
                                     break
@@ -262,7 +262,7 @@ class EntityRelationExtractor:
                             if cached is not None:
                                 batch_results.append(cached)
                             else:
-                                batch_results.append(self._process_single_chunk(chunk.content))
+                                batch_results.append(self._process_single_chunk(chunk))
                     else:
                         for idx, result in enumerate(batch_results):
                             if cached_batch_results[idx] is None:
@@ -273,7 +273,7 @@ class EntityRelationExtractor:
                     print(f"批处理错误，切换到单个处理: {e}")
                     for chunk in batch_chunks:
                         try:
-                            results.append(self._process_single_chunk(chunk.content))
+                            results.append(self._process_single_chunk(chunk))
                         except Exception as e2:
                             print(f"单个 chunk 处理失败: {e2}")
                             results.append("")
@@ -301,18 +301,17 @@ class EntityRelationExtractor:
         return [part.strip() for part in parts]
     
     @retry(times=3, exceptions=(Exception,), delay=1.0)
-    def _process_single_chunk(self, input_text: str) -> str:
+    def _process_single_chunk(self, chunk: Chunk) -> str:
         """
-        处理单个文本块（调用 LLM 并缓存结果）
+        处理单个 Chunk（调用 LLM 并缓存结果）
 
         Args:
-            input_text: 输入文本
+            chunk: 待处理的 Chunk 对象
 
         Returns:
             str: 处理结果
         """
-        cache_key = self._generate_cache_key(input_text)
-
+        _t0 = time.time()
         response = self.chain.invoke({
             "chat_history": self.chat_history,
             "entity_types": self.entity_types,
@@ -320,10 +319,12 @@ class EntityRelationExtractor:
             "tuple_delimiter": self.tuple_delimiter,
             "record_delimiter": self.record_delimiter,
             "completion_delimiter": self.completion_delimiter,
-            "input_text": input_text
+            "input_text": chunk.content,
         })
-
+        _dt = time.time() - _t0
+        _out = len(response.content) if hasattr(response, 'content') else 0
+        print(f"[耗时] {_dt:.1f}s | 输出={_out}tok | {chunk.chunk_id[:12]}...")
         result = response.content
-        self._save_to_cache(cache_key, result)
+        self._save_to_cache(chunk.chunk_id, result)
         return result
     

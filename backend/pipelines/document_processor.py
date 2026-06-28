@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Union
+from typing import List, Dict, Optional, Any, Union, Tuple
 
 # 确保项目根目录在 sys.path 中，支持直接脚本执行
 _project_root = str(Path(__file__).resolve().parent.parent.parent)
@@ -16,15 +16,17 @@ from backend.config.settings import FILES_DIR, CHUNK_SIZE, OVERLAP
 
 class DocumentProcessor:
     """
-    文档处理器，用于整合文件读取、文本分块和向量操作等功能
+    文档处理器，用于整合文件读取、文本分块和向量操作等功能。
+
+    内部集成 FileChangeManager，自动跳过未变更的文件。
     """
 
-    def __init__(self, directory_path: Optional[str] = None, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP):
+    def __init__(self, directory_path: Optional[str] = FILES_DIR, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP):
         """
         初始化文档处理器
 
         Args:
-            directory_path: 文件目录路径，为 None 时需在 process_directory 中传入
+            directory_path: 文件目录路径，为 None 时需动态传入
             chunk_size: 分块大小
             overlap: 分块重叠大小
         """
@@ -34,51 +36,43 @@ class DocumentProcessor:
 
     def process(
         self,
-        file_extensions: Optional[List[str]] = None,
-        recursive: bool = True,
         file_paths: Optional[Union[str, List[str]]] = None,
         directory_path: Optional[str] = None,
-    ) -> List[Chunk]:
+    ) -> List[Tuple[str, List[Chunk]]]:
         """
-        读取文件并分块，返回 Chunk 列表
+        读取文件并分块，按文档分组返回 (file_name, chunks) 列表
 
         Args:
-            file_extensions: 文件扩展名列表，如不指定则读取所有支持的格式
-            recursive: 是否递归读取子目录，默认为 True
             file_paths: 指定要处理的文件路径，为 None 时扫描目录
             directory_path: 要扫描的目录路径，动态覆盖 __init__ 时传入的路径
 
         Returns:
-            List[Chunk]: 全部文档的分块列表
+            List[Tuple[str, List[Chunk]]]: [(file_name, [Chunk, ...]), ...]
         """
         docs = self.file_reader.read_files(
-            file_extensions=file_extensions,
-            recursive=recursive,
             file_paths=file_paths,
-            directory_path=directory_path,
+            directory_path=directory_path
         )
-        print(f"DocumentProcessor找到的文件数量: {len(docs)}")
 
-        all_chunks: List[Chunk] = []
+        results: List[Tuple[str, List[Chunk]]] = []
         for doc in docs:
             if doc.status == "failed":
-                print(f"  {doc.file_name}: 状态为 failed，需要重新上传。")
+                print(f"  {doc.file_name}: 状态为 failed，跳过")
                 continue
-            doc_chunks = self._process_single_document(doc)
-            all_chunks.extend(doc_chunks)
+            chunks = self._process_single_document(doc)
+            results.append((doc.file_name, chunks))
+            print(f"  {doc.file_name}: {len(chunks)} 个 Chunk")
 
-        print(f"分块完成，总共 {len(all_chunks)} 个 Chunk")
-        return all_chunks
+        print(f"分块完成，共处理 {len(results)} 个文件")
+        return results
 
     def _process_single_document(self, doc: Document) -> List[Chunk]:
         """对单个 Document 进行分块，返回 Chunk 列表"""
         try:
-            chunks = self.chunker.chunk_document(doc)
+            return self.chunker.chunk_document(doc)
         except Exception as e:
             print(f"分块错误 ({doc.file_name}): {str(e)}")
             return []
-        print(f"  {doc.file_name}: {len(chunks)} 个 Chunk")
-        return chunks
 
     def get_file_stats(
         self,
@@ -89,8 +83,8 @@ class DocumentProcessor:
         获取目录中文件的统计信息
 
         Args:
-            file_extensions: 指定要统计的文件扩展名，如不指定则处理所有支持的类型
-            recursive: 是否递归统计子目录，默认为True
+            file_extensions: 指定要统计的文件扩展名
+            recursive: 是否递归统计子目录
 
         Returns:
             Dict: 文件统计信息
@@ -151,22 +145,12 @@ class DocumentProcessor:
 
 if __name__ == "__main__":
     processor = DocumentProcessor(FILES_DIR)
+    file_chunks = processor.process(recursive=True)
+    print(f"\n共处理 {len(file_chunks)} 个文件")
 
-    # 读取 → 分块 → 得到 Chunk 列表
-    chunks = processor.process_directory(recursive=True)
-    print(f"\n共生成 {len(chunks)} 个 Chunk")
-
-    # 按来源文档统计
-    doc_stats: Dict[str, int] = {}
-    for c in chunks:
-        doc_stats[c.doc_id] = doc_stats.get(c.doc_id, 0) + 1
+    total_chunks = sum(len(chunks) for _, chunks in file_chunks)
+    print(f"共生成 {total_chunks} 个 Chunk")
 
     print("\n各文档分块数量:")
-    for doc_id, count in doc_stats.items():
-        print(f"  {doc_id}: {count} 块")
-
-    # 显示前 3 个 Chunk 预览
-    print("\n前 3 个 Chunk 预览:")
-    for c in chunks[:2]:
-        print(f"  [{c.chunk_id}] {c.content}...")
-        print("="*60)
+    for file_name, chunks in file_chunks:
+        print(f"  {file_name}: {len(chunks)} 块")

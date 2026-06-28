@@ -61,31 +61,30 @@ VECTOR_STORE_PATH = PROJECT_ROOT / "data/vector_store/"  # 向量存储路径
 
 # ===== 知识库与系统参数 =====
 
-KB_NAME = "华东理工大学"  # 知识库主题，用于deepsearch
+KB_NAME = "设备故障"  # 知识库主题，用于deepsearch
 workers = _get_env_int("FASTAPI_WORKERS", 2) or 2  # FastAPI 并发进程数
 
 # ===== 知识图谱配置 =====
 
-theme = "华东理工大学学生管理"  # 知识图谱主题
+theme = "设备故障"  # 知识图谱主题
 
 entity_types = [
-    "学生类型",
-    "奖学金类型",
-    "处分类型",
-    "部门",
-    "学生职责",
-    "管理规定",
+    "设备",
+    "部件",
+    "故障",
+    "故障原因",
+    "故障现象",
+    "维修措施",
+    "参数",
 ]  # 知识图谱实体类型
 
 relationship_types = [
-    "申请",
-    "评选",
-    "违纪",
-    "资助",
-    "申诉",
-    "管理",
-    "权利义务",
-    "互斥",
+    "发生",
+    "包含",
+    "导致",
+    "表现为",
+    "维修解决",
+    "关联于",
 ]  # 知识图谱关系类型
 
 # 冲突解决策略：manual_first / auto_first / merge
@@ -228,6 +227,8 @@ OPENAI_LLM_CONFIG = {
     "api_key": OPENAI_API_KEY,
     "base_url": OPENAI_BASE_URL,
 }
+
+VERBOSE = os.getenv("VERBOSE") or False
 
 # ===== 相似实体检测参数 =====
 

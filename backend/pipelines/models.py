@@ -27,9 +27,13 @@ class Document:
     file_hash: str = ""
 
     def __post_init__(self):
-        """自动计算文件内容的 SHA256 哈希"""
-        if not self.file_hash and self.file_content:
-            self.file_hash = hashlib.sha256(self.file_content.encode("utf-8")).hexdigest()
+        """自动计算文件的 SHA256 哈希（基于原始二进制）"""
+        if not self.file_hash and self.file_path:
+            try:
+                with open(self.file_path, "rb") as f:
+                    self.file_hash = hashlib.sha256(f.read()).hexdigest()
+            except Exception:
+                pass
 
     def __str__(self):
         preview = (self.file_content[:80] + "...") if len(self.file_content) > 80 else self.file_content
@@ -62,13 +66,13 @@ class Chunk:
             self.chunk_id = hashlib.sha1(self.content.encode("utf-8")).hexdigest()
 
     def __str__(self):
-        preview = (self.content[:80] + "...") if len(self.content) > 80 else self.content
+        # preview = (self.content[:80] + "...") if len(self.content) > 80 else self.content
         return (
             f"Chunk(\n"
             f"  file_name : {self.file_name}\n"
             f"  chunk_id  : {self.chunk_id}\n"
             f"  doc_id    : {self.doc_id}\n"
-            f"  content   : {preview}\n"
+            f"  content   : {self.content}\n"
             f")"
         )
 

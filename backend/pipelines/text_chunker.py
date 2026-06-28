@@ -11,7 +11,7 @@ if _project_root not in sys.path:
 
 from backend.config.settings import CHUNK_SIZE, OVERLAP, MAX_TEXT_LENGTH
 from backend.pipelines.models import Document, Chunk
-
+import time
 
 class ChineseTextChunker:
     """中文文本分块器，将长文本分割成带有重叠的文本块"""
@@ -27,11 +27,12 @@ class ChineseTextChunker:
         """
         if chunk_size <= overlap:
             raise ValueError("chunk_size必须大于overlap")
-
+        start = time.time()
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.max_text_length = max_text_length
         self.tokenizer = hanlp.load(hanlp.pretrained.tok.COARSE_ELECTRA_SMALL_ZH)
+        print(f"[ChineseTextChunker] init {(time.time() - start):.5f} s")
 
     # public 接口
     def chunk_text(self, text: str) -> List[List[str]]:

@@ -1,6 +1,7 @@
 import os
 from typing import Dict, List, Optional, Union
 
+from backend.config.settings import FILES_DIR
 from .handle import (
     Document,
     BaseFileHandler,
@@ -28,7 +29,7 @@ class FileReader:
     - YAML/YML (YAML文件)
     """
 
-    def __init__(self, directory_path: Optional[str] = None):
+    def __init__(self, directory_path: Optional[str] = FILES_DIR):
         """
         初始化文件读取器
 

@@ -105,7 +105,7 @@ class GraphWriter:
                         type=rel_type,
                         properties={
                             "description": description,
-                            "weight": float(weight)
+                            "weight": float(weight.strip('"\''))
                         }
                     )
                 )

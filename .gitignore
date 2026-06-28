@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 /dist/
-/build/
+!/build/
 *.egg
 .venv/
 venv/
@@ -49,3 +49,11 @@ coverage.xml
 # OS
 .DS_Store
 Thumbs.db
+
+# Cache
+cache/
+
+# Temp
+data/temp_graph_input/
+file_registry.json
+tests/*.py

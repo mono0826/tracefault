@@ -58,29 +58,19 @@ class GraphStructureBuilder:
         )
         return doc
         
-    def create_relation_between_chunks(self, chunks: List['Chunk']) -> List[Dict]:
+    def create_relation_between_chunks(self, file_name: str, chunks: List[Chunk]) -> List[Dict]:
         """
         创建Chunk节点并建立关系 - 批处理优化版本
 
         Args:
-            chunks: Chunk对象列表，每个包含 file_name, chunk_id, doc_id, content
+            file_name: 所属文件名
+            chunks: Chunk对象列表
 
         Returns:
             List[Dict]: 带有ID和文档的块列表
-
-        Raises:
-            ValueError: 如果 chunks 来自不同文件（file_name 不一致）
         """
         if not chunks:
             return []
-
-        # 校验所有 chunk 属于同一个文件（FIRST_CHUNK 查询依赖单一 file_name）
-        first_file = chunks[0].file_name
-        for c in chunks[1:]:
-            if c.file_name != first_file:
-                raise ValueError(
-                    f"所有 chunk 必须属于同一文件，发现 '{c.file_name}' ≠ '{first_file}'"
-                )
 
         t0 = time.time()
 
@@ -91,7 +81,7 @@ class GraphStructureBuilder:
 
         # 处理每个chunk
         for i, chunk in enumerate(chunks):
-            chunk_id = chunk.chunk_id or generate_hash(chunk.content)
+            chunk_id = chunk.chunk_id
             position = i + 1
             previous_chunk_id = chunk_id if i == 0 else lst_chunks_including_hash[-1]['chunk_id']
 
@@ -139,13 +129,13 @@ class GraphStructureBuilder:
 
             # 当累积了一定量的数据时，进行批处理
             if len(batch_data) >= self.batch_size:
-                self._process_batch(chunk.file_name, batch_data, relationships)
+                self._process_batch(file_name, batch_data, relationships)
                 batch_data = []
                 relationships = []
 
         # 处理剩余的数据
         if batch_data:
-            self._process_batch(chunk.file_name, batch_data, relationships)
+            self._process_batch(file_name, batch_data, relationships)
 
         t1 = time.time()
         print(f"创建关系耗时: {t1-t0:.2f}秒")
@@ -221,35 +211,25 @@ class GraphStructureBuilder:
             """
             self.graph.query(query_next_chunk, params={"relationships": next_relationships})
     
-    def parallel_process_chunks(self, chunks: List[Chunk], max_workers=None) -> List[Dict]:
+    def parallel_process_chunks(self, file_name: str, chunks: List[Chunk], max_workers=None) -> List[Dict]:
         """
         并行处理chunks，提高大量数据的处理速度
 
         Args:
+            file_name: 所属文件名
             chunks: Chunk对象列表
             max_workers: 并行工作线程数
 
         Returns:
             List[Dict]: 带有ID和文档的块列表
-
-        Raises:
-            ValueError: 如果 chunks 来自不同文件（file_name 不一致）
         """
         if not chunks:
             return []
 
-        # 校验所有 chunk 属于同一个文件
-        first_file = chunks[0].file_name
-        for c in chunks[1:]:
-            if c.file_name != first_file:
-                raise ValueError(
-                    f"所有 chunk 必须属于同一文件，发现 '{c.file_name}' ≠ '{first_file}'"
-                )
-
         max_workers = max_workers or DEFAULT_MAX_WORKERS
 
         if len(chunks) < 100:  # 对于小数据集，使用标准方法
-            return self.create_relation_between_chunks(chunks)
+            return self.create_relation_between_chunks(file_name, chunks)
         
         # 将chunks分为多个批次
         chunk_batches = []
@@ -303,7 +283,7 @@ class GraphStructureBuilder:
                     "pg_content": chunk.content,
                     "position": position,
                     "length": len(chunk.content),
-                    "f_name": chunk.file_name,
+                    "f_name": file_name,
                     "previous_id": previous_chunk_id,
                     "content_offset": offset,
                     "tokens": len(chunk.content.split())

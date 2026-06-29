@@ -127,7 +127,7 @@ examples = [
 
 # ===== 性能优化配置 =====
 
-MAX_WORKERS = _get_env_int("MAX_WORKERS", 4) or 4  # 并行工作线程数
+MAX_WORKERS = _get_env_int("MAX_WORKERS", 8) or 8  # 并行工作线程数
 BATCH_SIZE = _get_env_int("BATCH_SIZE", 100) or 100  # 批处理大小
 ENTITY_BATCH_SIZE = _get_env_int("ENTITY_BATCH_SIZE", 50) or 50  # 实体批次大小
 CHUNK_BATCH_SIZE = _get_env_int("CHUNK_BATCH_SIZE", 100) or 100  # 文本块批次

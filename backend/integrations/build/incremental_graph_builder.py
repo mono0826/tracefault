@@ -93,7 +93,7 @@ class IncrementalGraphUpdater:
         self,
         file_paths: str | List[str] | None = None,
         directory_path: str | None = None
-    ) -> Dict[str, List[str]]:
+    ) -> Dict[str, List[Dict[str, str]]]:
         """
         检测文件变更
 
@@ -102,7 +102,9 @@ class IncrementalGraphUpdater:
             directory_path: 目录路径
 
         Returns:
-            Dict: 包含三种变更类型的文件列表：added, modified, deleted
+            Dict: {"added": [{"path": str, "hash": str}, ...],
+                   "modified": [...],
+                   "deleted": [...]}
         """
         return self.file_manager.detect_changes(
             file_paths=file_paths,
@@ -605,12 +607,12 @@ class IncrementalGraphUpdater:
             "chunks": updated_chunks
         }
     
-    def process_deleted_files(self, deleted_files: List[str]) -> int:
+    def process_deleted_files(self, deleted_files: List[Dict[str, str]]) -> int:
         """
         处理已删除的文件
         
         Args:
-            deleted_files: 删除的文件列表
+            deleted_files: [{"path": 文件路径, "hash": 文件hash}, ...]
             
         Returns:
             int: 删除的节点数量
@@ -621,19 +623,23 @@ class IncrementalGraphUpdater:
         self.console.print(f"[cyan]处理 {len(deleted_files)} 个已删除的文件...[/cyan]")
         
         deleted_count = 0
-        for file_path in deleted_files:
-            file_name = Path(file_path).name
-            
-            # 查找与文件关联的所有Chunk节点
+        for item in deleted_files:
+            file_path = item["path"]
+            file_hash = item.get("hash", "")
+
+            # 通过文件hash查找关联的Chunk节点
             chunk_query = """
-            MATCH (d:`__Document__` {fileName: $fileName})<-[:PART_OF]-(c:`__Chunk__`)
+            MATCH (d:`__Document__` {fileHash: $fileHash})
+            MATCH (c:`__Chunk__`) WHERE c.file_hash = d.fileHash
             RETURN collect(c.id) AS chunk_ids, count(c) AS chunk_count
             """
-            
-            chunk_result = self.graph.query(chunk_query, params={"fileName": file_name})
-            
+
+            chunk_result = self.graph.query(chunk_query, params={
+                "fileHash": file_hash,
+            })
+
             if not chunk_result or not chunk_result[0]["chunk_ids"]:
-                self.console.print(f"[yellow]文件 {file_name} 没有相关的数据需要删除[/yellow]")
+                self.console.print(f"[yellow]文件 {Path(file_path).name} 没有相关的数据需要删除[/yellow]")
                 continue
                 
             chunk_ids = chunk_result[0]["chunk_ids"]
@@ -646,9 +652,7 @@ class IncrementalGraphUpdater:
             WITH e, count(c) AS references
             MATCH (chunk:`__Chunk__`)-[:MENTIONS]->(e)
             WITH e, references, count(chunk) AS total_references
-            WHERE references = total_references 
-              AND NOT e.manual_edit = true  // 排除手动编辑的实体
-              AND NOT e.protected = true    // 排除受保护的实体
+            WHERE references = total_references
             RETURN collect(e.id) AS entity_ids, count(e) AS entity_count
             """
             
@@ -663,46 +667,46 @@ class IncrementalGraphUpdater:
             # 删除与文件关联的所有数据
             delete_query = """
             // 删除文档节点和关系
-            MATCH (d:`__Document__` {fileName: $fileName})
+            MATCH (d:`__Document__` {fileHash: $fileHash})
             OPTIONAL MATCH (d)-[r]-()
             DELETE r
-            
-            // 删除Chunk节点和关系
+
+            // 删除指定Chunk的关系
             WITH d
-            MATCH (c:`__Chunk__`)-[r1:PART_OF]->(d)
-            OPTIONAL MATCH (c)-[r2]-()
-            WHERE NOT type(r2) = 'PART_OF'
-            DELETE r2
-            
+            UNWIND $chunk_ids AS cid
+            MATCH (c:`__Chunk__` {id: cid})
+            OPTIONAL MATCH (c)-[r]-()
+            DELETE r
+
             // 删除孤立的实体节点
-            WITH d, collect(c.id) as chunk_ids
+            WITH d
             UNWIND $entity_ids AS entity_id
             MATCH (e:`__Entity__` {id: entity_id})
-            WHERE NOT e.manual_edit = true AND NOT e.protected = true // 再次检查保护
             DELETE e
-            
+
             // 删除Chunk节点
-            WITH d, chunk_ids
-            MATCH (c:`__Chunk__`)
-            WHERE c.id IN chunk_ids
+            WITH d
+            UNWIND $chunk_ids AS cid
+            MATCH (c:`__Chunk__` {id: cid})
             DELETE c
-            
+
             // 最后删除文档节点
             DELETE d
-            
+
             RETURN count(d) AS deleted_docs
             """
-            
+
             delete_result = self.graph.query(delete_query, params={
-                "fileName": file_name, 
-                "entity_ids": entity_ids
+                "fileHash": file_hash,
+                "entity_ids": entity_ids,
+                "chunk_ids": chunk_ids,
             })
             
             deleted_docs = delete_result[0]["deleted_docs"] if delete_result else 0
             file_deleted_count = chunk_count + entity_count + deleted_docs
             deleted_count += file_deleted_count
             
-            self.console.print(f"[blue]已删除文件 {file_name} 相关数据: "
+            self.console.print(f"[blue]已删除文件 {Path(file_path).name} 相关数据: "
                               f"{chunk_count} 个Chunk节点, "
                               f"{entity_count} 个实体节点, "
                               f"{deleted_docs} 个文档节点[/blue]")
@@ -921,11 +925,16 @@ class IncrementalGraphUpdater:
     
     def process_incremental_update(
         self,
-        changes: Optional[Union[str, List[str]]] = None,
+        changes: Dict[str, List[Dict[str, str]]],
     ) -> Dict[str, Any]:
         """
         执行增量更新流程
-        
+
+        Args:
+            changes: {"added": [{"path":..., "hash":...}, ...],
+                      "modified": [...],
+                      "deleted": [...]}
+
         Returns:
             Dict: 更新结果统计
         """
@@ -940,21 +949,26 @@ class IncrementalGraphUpdater:
             added_files = changes.get("added", [])
             modified_files = changes.get("modified", [])
             deleted_files = changes.get("deleted", [])
+
+            # 后续逻辑仍用路径列表，hash 通过 changes 透传
+            added_paths = [f["path"] for f in added_files]
+            modified_paths = [f["path"] for f in modified_files]
+            deleted_paths = [f["path"] for f in deleted_files]
+
+            changed_files = modified_paths
+            self.stats["files_processed"] = len(added_paths) + len(modified_paths) + len(deleted_paths)
             
-            changed_files = modified_files  # 只有修改的文件需要更新embedding
-            self.stats["files_processed"] = len(added_files) + len(modified_files) + len(deleted_files)
-            
-            if not added_files and not changed_files and not deleted_files:
+            if not added_paths and not changed_files and not deleted_paths:
                 self.console.print("[yellow]未检测到文件变更[/yellow]")
                 return self.stats
-            
+
             # 2. 处理已删除的文件
-            if deleted_files:
+            if deleted_paths:
                 self.console.print("[bold cyan]处理已删除的文件...[/bold cyan]")
                 self.process_deleted_files(deleted_files)
-            
+
             # 3. 处理新文件 - 执行完整的处理流程
-            if added_files:
+            if added_paths:
                 self.console.print("[bold cyan]处理新增文件...[/bold cyan]")
                 new_file_results = self.process_new_files(added_files)
                 # 更新统计信息

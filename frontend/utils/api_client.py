@@ -134,20 +134,27 @@ def get_graph_data(limit: int = 300) -> dict:
             LIMIT {limit}
         """)
 
+        # 组装节点列表
         node_list = []
+        node_ids = set()
         for n in nodes:
+            node_id = n["id"]
+            node_ids.add(node_id)
             type_label = "Entity"
             if n.get("labels"):
                 type_label = next((l for l in n["labels"] if l != "__Entity__"), "Entity")
             node_list.append({
-                "id": n["id"],
-                "label": n["id"],
+                "id": node_id,
+                "label": node_id,
                 "group": type_label,
                 "description": n.get("description", "") or "",
             })
 
+        # 只保留两端节点都在已返回节点列表中的关系，避免前端报错
         link_list = []
         for r in rels:
+            if r["source"] not in node_ids or r["target"] not in node_ids:
+                continue
             w = float(r.get("weight", 1) or 1)
             link_list.append({
                 "source": r["source"],
@@ -204,7 +211,18 @@ def get_graph_stats() -> dict:
         return {"connected": False, "error": str(e)}
 
 
-def run_pipeline(file_paths: list[str] = None, on_status=None, on_log=None, incremental: bool = False) -> dict:
+def update_graph() -> dict:
+    """更新图谱（Embedding、社区检测等，不检测文件变更）"""
+    from backend.integrations.main import KnowledgeGraphProcessor
+    try:
+        processor = KnowledgeGraphProcessor()
+        processor.update_graph()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def run_pipeline(file_paths: list[str] = None, directory_path: str = None, on_status=None, on_log=None, incremental: bool = False) -> dict:
     """执行知识图谱完整构建流程"""
     from backend.integrations.main import KnowledgeGraphProcessor
     if on_log:
@@ -215,6 +233,7 @@ def run_pipeline(file_paths: list[str] = None, on_status=None, on_log=None, incr
         processor = KnowledgeGraphProcessor()
         processor.process_all(
             file_paths=file_paths,
+            directory_path=directory_path,
             incremental=incremental,
         )
         stats = get_graph_stats()

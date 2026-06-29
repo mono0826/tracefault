@@ -94,7 +94,7 @@ class FileChangeManager:
 
         # 指定文件路径 → 直接处理
         if file_paths is not None:
-            print(f"file_paths = {file_paths}")
+            print(f"file_paths = {[Path(p).name for p in (file_paths if isinstance(file_paths, list) else [file_paths])]}")
 
             paths = [file_paths] if isinstance(file_paths, str) else file_paths
             for fp_str in paths:
@@ -141,7 +141,7 @@ class FileChangeManager:
         self,
         file_paths: Optional[Union[str, List[str]]] = None,
         directory_path: Optional[str] = None,
-    ) -> Dict[str, List[str]]:
+    ) -> Dict[str, List[Dict[str, str]]]:
         """
         检测文件变更
 
@@ -150,24 +150,26 @@ class FileChangeManager:
             directory_path: 目录路径
 
         Returns:
-            Dict: 包含三种变更类型的文件列表：added, modified, deleted
+            Dict: {"added": [{"path": str, "hash": str}, ...],
+                   "modified": [...],
+                   "deleted": [...]}
         """
         current_files = self._scan_current_files(file_paths, directory_path)
         added_files, modified_files, deleted_files = [], [], []
 
         for filename, file_info in current_files.items():
             if filename not in self.registry:
-                added_files.append(filename)
+                added_files.append({"path": filename, "hash": file_info["hash"]})
                 self.registry[filename] = file_info
             elif file_info["hash"] != self.registry[filename]["hash"]:
-                modified_files.append(filename)
+                modified_files.append({"path": filename, "hash": file_info["hash"]})
                 self.registry[filename] = file_info
 
-        # 只有扫描目录时才检测删除（指定文件时不删已有记录）
-        if not file_paths:
+        # 扫描目录时检测删除；指定具体文件时不删 registry 中其他文件
+        if directory_path or not file_paths:
             for filename in list(self.registry):
                 if filename not in current_files:
-                    deleted_files.append(filename)
+                    deleted_files.append({"path": filename, "hash": self.registry[filename].get("hash")})
                     self.registry.pop(filename, None)
 
         return {"added": added_files, "modified": modified_files, "deleted": deleted_files}

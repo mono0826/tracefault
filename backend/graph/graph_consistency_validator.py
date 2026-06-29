@@ -44,7 +44,6 @@ class GraphConsistencyValidator:
         query = """
         MATCH (e:`__Entity__`)
         WHERE NOT (e)<-[:MENTIONS]-()
-          AND NOT e.manual_edit = true
         RETURN e.id AS entity_id, count(e) AS count
         """
         
@@ -59,8 +58,7 @@ class GraphConsistencyValidator:
             id_query = """
             MATCH (e:`__Entity__`)
             WHERE NOT (e)<-[:MENTIONS]-()
-              AND NOT e.manual_edit = true
-                RETURN e.id AS entity_id
+            RETURN e.id AS entity_id
             LIMIT 1000
             """
             id_result = self.graph.query(id_query)
@@ -252,8 +250,7 @@ class GraphConsistencyValidator:
         UNWIND $orphan_ids AS entity_id
         MATCH (e:`__Entity__` {id: entity_id})
         WHERE NOT (e)<-[:MENTIONS]-()
-          AND NOT e.manual_edit = true
-        DELETE e
+        DETACH DELETE e
         RETURN count(*) AS deleted
         """
         
@@ -341,13 +338,14 @@ class GraphConsistencyValidator:
         repair_query = """
         MATCH (d:`__Document__`)
         WHERE NOT (d)-[:FIRST_CHUNK]->()
-        
-        MATCH (c:`__Chunk__`)-[:PART_OF]->(d)
-        WHERE c.position = 1 OR c.position IS NULL
-        
+
+        MATCH (c:`__Chunk__`)
+        WHERE c.file_hash = d.fileHash
+          AND (c.position = 1 OR c.position IS NULL)
+
         WITH d, c ORDER BY c.position ASC LIMIT 1
         MERGE (d)-[r:FIRST_CHUNK]->(c)
-        
+
         RETURN count(r) AS repaired
         """
         

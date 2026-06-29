@@ -81,8 +81,11 @@ def visualize_graph(kg_data: dict):
             borderWidth=2,
         )
 
-    # 添加边
+    # 添加边（防御性过滤：跳过两端节点不存在的边）
+    added_node_ids = set(n["id"] for n in kg_data["nodes"])
     for link in kg_data["links"]:
+        if link["source"] not in added_node_ids or link["target"] not in added_node_ids:
+            continue
         w = float(link.get("weight", 1))
         width = edge_width * min(1 + w * 0.2, 3)
         net.add_edge(

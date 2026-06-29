@@ -21,6 +21,7 @@ from frontend.utils.api_client import (
     check_neo4j,
     get_graph_stats,
     get_graph_data,
+    update_graph,
     PIPELINE_STAGES,
 )
 from frontend.components.graph_view import visualize_graph
@@ -47,7 +48,7 @@ def _render_stage_table(stage_results: dict):
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
-def _run_pipeline_ui(document_paths: list[str], incremental: bool = False):
+def _run_pipeline_ui(document_paths: list[str] = None, directory_path: str = None, incremental: bool = False):
     """执行管道并在 UI 逐步显示进度"""
     neo4j_ok, neo4j_msg = check_neo4j()
     if not neo4j_ok:
@@ -74,6 +75,7 @@ def _run_pipeline_ui(document_paths: list[str], incremental: bool = False):
 
     result = run_pipeline(
         file_paths=document_paths,
+        directory_path=directory_path,
         on_status=_on_status,
         on_log=_on_log,
         incremental=incremental,
@@ -235,23 +237,46 @@ with tab_graph:
     )
 
     doc_files = []
+    dir_path = None
 
     if input_mode[1] == "dir":
-        dir_path = st.text_input(
-            "文档文件夹路径",
-            placeholder="例如：D:\\data\\equipment_docs",
-            help="输入包含设备文档的文件夹路径，支持 PDF / Word / Markdown / TXT",
-        )
-        if dir_path:
-            input_path = Path(dir_path)
-            if not input_path.exists():
-                st.error(f"路径不存在: {dir_path}")
-            elif not input_path.is_dir():
-                st.error(f"路径不是文件夹: {dir_path}")
-            else:
-                doc_files = [str(p) for p in input_path.rglob("*") if p.suffix.lower() in (".pdf", ".docx", ".md", ".txt")]
-                st.caption(f"找到 {len(doc_files)} 个文档")
-    else:
+        # 系统文件夹选择对话框
+        if "kg_selected_folder" not in st.session_state:
+            st.session_state.kg_selected_folder = ""
+
+        col_btn, col_path = st.columns([1, 3])
+        with col_btn:
+            if st.button("📂 选择文件夹", use_container_width=True):
+                try:
+                    import tkinter as tk
+                    from tkinter import filedialog
+                    root = tk.Tk()
+                    root.withdraw()
+                    root.attributes("-topmost", True)
+                    folder = filedialog.askdirectory()
+                    root.destroy()
+                    if folder:
+                        st.session_state.kg_selected_folder = folder
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"打开文件夹对话框失败: {e}")
+
+        with col_path:
+            folder_path = st.text_input(
+                "已选择路径",
+                value=st.session_state.kg_selected_folder,
+                placeholder="点击左侧按钮选择文件夹",
+                label_visibility="collapsed",
+            )
+
+        if st.session_state.kg_selected_folder:
+            input_path = Path(st.session_state.kg_selected_folder)
+            if input_path.exists() and input_path.is_dir():
+                dir_path = str(input_path)
+                doc_count = len(list(input_path.rglob("*")))
+                st.caption(f"已选择: {input_path}")
+
+    else:  # file upload mode
         uploaded_files = st.file_uploader(
             "选择文档文件（可多选）",
             type=["pdf", "docx", "md", "txt"],
@@ -277,16 +302,18 @@ with tab_graph:
             help="全量：清空所有旧数据重新构建 | 增量：只处理新增和修改的文件，保留已有数据",
         )
 
-    if not doc_files:
+    has_input = bool(dir_path) or bool(doc_files)
+    if not has_input:
         st.info("请先选择文档输入源，然后点击「开始构建」。")
     else:
         with col_btn:
             mode_key = mode[1]
+            is_inc = (mode_key == "incremental")
             if st.button("🚀 开始构建", type="primary", use_container_width=True):
-                if mode_key == "incremental":
-                    _run_pipeline_ui(doc_files, incremental=True)
+                if input_mode[1] == "dir":
+                    _run_pipeline_ui(directory_path=dir_path, incremental=is_inc)
                 else:
-                    _run_pipeline_ui(doc_files, incremental=False)
+                    _run_pipeline_ui(document_paths=doc_files, incremental=is_inc)
 
 # ========== 图谱可视化 Tab ==========
 with tab_visual:
@@ -306,7 +333,15 @@ with tab_visual:
         if "kg_cache" not in st.session_state:
             st.session_state.kg_cache = None
 
-        if refresh or st.session_state.kg_cache is None:
+        if refresh:
+            status_placeholder = st.empty()
+            with status_placeholder.container():
+                st.markdown("<div style='text-align:center;padding:80px 0'><h3>🔄 更新图谱中...</h3><p>正在更新 Embedding 与社区检测</p></div>", unsafe_allow_html=True)
+                update_graph()
+            status_placeholder.empty()
+            st.session_state.kg_cache = None
+
+        if st.session_state.kg_cache is None:
             with col_left:
                 with st.spinner("加载图谱数据..."):
                     kg_data = get_graph_data(limit=limit)

@@ -5,26 +5,12 @@
 """
 
 system_template_build_graph = """
--目标-
-给定相关的文本文档和实体类型列表，从文本中识别出这些类型的所有实体以及所识别实体之间的所有关系。
+你是设备故障知识图谱专家。从文本提取实体和关系，严格按格式输出。
 
--步骤-
-1. 识别所有实体。对于每个已识别的实体，提取以下信息：
-   - entity_name：实体名称
-   - entity_type：以下类型之一：[{entity_types}]
-   - entity_description：对实体属性和活动的综合描述
-   格式：("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>
+("entity"{tuple_delimiter}名称{tuple_delimiter}类型{tuple_delimiter}描述)
+("relationship"{tuple_delimiter}源{tuple_delimiter}目标{tuple_delimiter}类型{tuple_delimiter}描述{tuple_delimiter}强度)
 
-2. 从步骤1中识别的实体中，识别彼此相关的所有实体配对，提取：
-   - source_entity：源实体名称
-   - target_entity：目标实体名称
-   - relationship_type：以下类型之一：[{relationship_types}]，不能归类时使用"其它"
-   - relationship_description：关系解释
-   - relationship_strength：关系强度评分
-   格式：("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_type>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_strength>)
-
-3. 所有实体和关系用中文输出，使用{record_delimiter}作为分隔符。
-4. 完成后输出{completion_delimiter}。
+用{record_delimiter}分隔行，完成后{completion_delimiter}。
 """
 
 human_template_build_graph = """

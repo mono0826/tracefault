@@ -2,6 +2,7 @@ from typing import List, Optional, Union
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 
 from backend.graph.core import connection_manager
@@ -21,6 +22,10 @@ class KnowledgeGraphProcessor:
     def __init__(self):
         """初始化知识图谱处理器"""
         self.console = Console()
+        self.graph_builder = KnowledgeGraphBuilder()
+        self.index_community_builder = IndexCommunityBuilder()
+        self.chunk_index_builder = ChunkIndexBuilder()
+        self.incremental_updater = IncrementalUpdateManager()
 
     def process_all(
         self,
@@ -58,6 +63,9 @@ class KnowledgeGraphProcessor:
             self.console.print(Panel(error_text, border_style="red"))
             raise
 
+    def update_graph(self):
+        self.incremental_updater.update()
+
     def get_stats(self) -> dict:
         """获取知识图谱统计（实体、关系、Chunk、社区）"""
         try:
@@ -93,21 +101,30 @@ class KnowledgeGraphProcessor:
         connection_manager.drop_all_indexes()
 
         self.console.print("\n[bold cyan]步骤 1: 构建基础图谱[/bold cyan]")
-        graph_builder = KnowledgeGraphBuilder()
-        result = graph_builder.process(file_paths=file_paths, directory_path=directory_path)
+        result = self.graph_builder.process(file_paths=file_paths, directory_path=directory_path)
 
         if not result:
             self.console.print("[yellow]步骤 1 未提取到实体，跳过后续步骤[/yellow]")
             return
 
         self.console.print("\n[bold cyan]步骤 2: 构建实体索引和社区[/bold cyan]")
-        IndexCommunityBuilder().process()
+        self.index_community_builder.process()
 
         self.console.print("\n[bold cyan]步骤 3: 构建Chunk索引[/bold cyan]")
-        ChunkIndexBuilder().process()
+        self.chunk_index_builder.process()
 
         success_text = Text("完整构建完成", style="bold green")
         self.console.print(Panel(success_text, border_style="green"))
+
+        stats = self.get_stats()
+        tbl = Table(title="图谱统计")
+        tbl.add_column("指标", style="cyan")
+        tbl.add_column("数量", justify="right")
+        tbl.add_row("实体", str(stats["entities"]))
+        tbl.add_row("关系", str(stats["relations"]))
+        tbl.add_row("Chunk", str(stats["chunks"]))
+        tbl.add_row("社区", str(stats["communities"]))
+        self.console.print(tbl)
 
     def _run_incremental(
         self,
@@ -118,11 +135,20 @@ class KnowledgeGraphProcessor:
         start_text = Text("增量更新模式", style="bold yellow")
         self.console.print(Panel(start_text, border_style="yellow"))
 
-        updater = IncrementalUpdateManager()
-        updater.process(
+        self.incremental_updater.process(
             file_paths=file_paths,
             directory_path=directory_path
         )
+
+        stats = self.get_stats()
+        tbl = Table(title="图谱统计")
+        tbl.add_column("指标", style="cyan")
+        tbl.add_column("数量", justify="right")
+        tbl.add_row("实体", str(stats["entities"]))
+        tbl.add_row("关系", str(stats["relations"]))
+        tbl.add_row("Chunk", str(stats["chunks"]))
+        tbl.add_row("社区", str(stats["communities"]))
+        self.console.print(tbl)
 
         success_text = Text("增量更新完成", style="bold green")
         self.console.print(Panel(success_text, border_style="green"))

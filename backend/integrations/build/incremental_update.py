@@ -76,7 +76,9 @@ class IncrementalUpdateManager:
         检测文件变更并更新图谱
         
         Returns:
-            Dict: 变更信息
+            Dict: {"added": [{"path": str, "hash": str}, ...],
+                   "modified": [...],
+                   "deleted": [...]}
             None: 无变更信息
         """
         self.console.print("[bold cyan]检测文件变更...[/bold cyan]")
@@ -429,7 +431,45 @@ class IncrementalUpdateManager:
             self.console.print(f"[red]执行增量更新流程时出错: {e}[/red]")
             self.stats["errors"] += 1
             return {"error": str(e)}
-    
+
+    def update(self) -> Dict[str, Any]:
+        """
+        对当前图谱进行更新。
+
+        执行：实体Embedding更新、Chunk Embedding更新、
+        图谱一致性验证、社区检测与摘要生成。
+        """
+        start_time = time.time()
+        self.console.print("\n[bold cyan]开始更新图谱...[/bold cyan]")
+        results = {}
+
+        try:
+            # 1. 更新实体Embedding
+            entity_updates = self.update_entity_embeddings()
+            results["entity_updates"] = entity_updates
+
+            # 2. 更新Chunk Embedding
+            chunk_updates = self.update_chunk_embeddings()
+            results["chunk_updates"] = chunk_updates
+
+            # 3. 验证图谱一致性
+            consistency = self.verify_graph_consistency()
+            results["consistency_check"] = consistency
+
+            # 4. 社区检测
+            community = self.detect_communities()
+            results["community_detection"] = community
+
+            end_time = time.time()
+            total_time = end_time - start_time
+            self.console.print(f"[bold green]图谱更新完成，总耗时: {total_time:.2f}秒[/bold green]")
+            return results
+
+        except Exception as e:
+            self.console.print(f"[red]更新图谱时出错: {e}[/red]")
+            self.stats["errors"] += 1
+            return {"error": str(e)}
+
     def start_scheduler(self):
         """
         启动调度器，开始后台运行增量更新流程

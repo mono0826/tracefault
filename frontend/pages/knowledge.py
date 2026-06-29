@@ -20,8 +20,10 @@ from frontend.utils.api_client import (
     run_fast_pipeline,
     check_neo4j,
     get_graph_stats,
+    get_graph_data,
     PIPELINE_STAGES,
 )
+from frontend.components.graph_view import visualize_graph
 
 DOCUMENTS_DIR = PROJECT_ROOT / "data" / "documents"
 DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -136,7 +138,7 @@ def _list_docs() -> list:
 st.title("📚 知识库管理")
 st.caption("上传设备手册、故障案例等技术文档，自动解析并存入知识库")
 
-tab_docs, tab_graph = st.tabs(["📄 文档管理", "🕸️ 知识图谱构建"])
+tab_docs, tab_graph, tab_visual = st.tabs(["📄 文档管理", "🕸️ 知识图谱构建", "👁️ 图谱可视化"])
 
 # ========== 文档管理 Tab ==========
 with tab_docs:
@@ -285,3 +287,44 @@ with tab_graph:
                     _run_pipeline_ui(doc_files, incremental=True)
                 else:
                     _run_pipeline_ui(doc_files, incremental=False)
+
+# ========== 图谱可视化 Tab ==========
+with tab_visual:
+    st.subheader("👁️ 知识图谱可视化")
+    st.caption("展示 Neo4j 中的实体和关系网络图")
+
+    neo4j_ok, neo4j_msg = check_neo4j()
+    if not neo4j_ok:
+        st.warning(f"⚠️ Neo4j 不可用: {neo4j_msg}")
+    else:
+        col_left, col_right = st.columns([3, 1])
+        with col_right:
+            limit = st.number_input("节点数量上限", min_value=50, max_value=500, value=200, step=50)
+            refresh = st.button("🔄 刷新图谱", type="primary", use_container_width=True)
+
+        kg_data = None
+        if "kg_cache" not in st.session_state:
+            st.session_state.kg_cache = None
+
+        if refresh or st.session_state.kg_cache is None:
+            with col_left:
+                with st.spinner("加载图谱数据..."):
+                    kg_data = get_graph_data(limit=limit)
+                    st.session_state.kg_cache = kg_data
+        else:
+            kg_data = st.session_state.kg_cache
+
+        if kg_data:
+            stats = get_graph_stats()
+            if stats.get("connected"):
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("🏷️ 实体", stats.get("entities", 0))
+                c2.metric("🔗 关系", stats.get("total_relations", 0))
+                c3.metric("📦 Chunk", stats.get("chunks", 0))
+                c4.metric("👥 社区", stats.get("communities", 0))
+
+            if kg_data.get("nodes"):
+                st.caption(f"当前显示 {len(kg_data['nodes'])} 个节点, {len(kg_data['links'])} 条关系")
+                visualize_graph(kg_data)
+            else:
+                st.info("图谱中暂无数据，请先在「知识图谱构建」中构建图谱")

@@ -158,11 +158,6 @@ class GraphStructureBuilder:
         """
         if not batch_data:
             return
-        
-        print(f"file_name = {file_name}")
-        print(f"batch_data = {batch_data}")
-        print(f"relationships = {relationships}")
-
 
         # 分离FIRST_CHUNK和NEXT_CHUNK关系
         first_relationships = [r for r in relationships if r.get("type") == "FIRST_CHUNK"]

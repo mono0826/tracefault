@@ -114,6 +114,54 @@ def search_sources(source_id: str, top_k: int = 1) -> list:
         return []
 
 
+def get_graph_data(limit: int = 300) -> dict:
+    """获取知识图谱节点和关系数据用于可视化"""
+    try:
+        db = get_db_manager()
+        # 获取实体节点
+        nodes = db.graph.query(f"""
+            MATCH (e:`__Entity__`)
+            RETURN e.id AS id, e.description AS description,
+                   labels(e) AS labels
+            LIMIT {limit}
+        """)
+        # 获取关系
+        rels = db.graph.query(f"""
+            MATCH (e1:`__Entity__`)-[r]->(e2:`__Entity__`)
+            RETURN e1.id AS source, e2.id AS target,
+                   type(r) AS rel_type, r.description AS description,
+                   r.weight AS weight
+            LIMIT {limit}
+        """)
+
+        node_list = []
+        for n in nodes:
+            type_label = "Entity"
+            if n.get("labels"):
+                type_label = next((l for l in n["labels"] if l != "__Entity__"), "Entity")
+            node_list.append({
+                "id": n["id"],
+                "label": n["id"],
+                "group": type_label,
+                "description": n.get("description", "") or "",
+            })
+
+        link_list = []
+        for r in rels:
+            w = float(r.get("weight", 1) or 1)
+            link_list.append({
+                "source": r["source"],
+                "target": r["target"],
+                "label": r.get("rel_type", ""),
+                "weight": w,
+                "description": r.get("description", "") or "",
+            })
+
+        return {"nodes": node_list, "links": link_list}
+    except Exception as e:
+        return {"nodes": [], "links": [], "error": str(e)}
+
+
 # ===== 知识图谱构建接口 =====
 
 PIPELINE_STAGES = [

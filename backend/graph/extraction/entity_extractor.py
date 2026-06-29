@@ -23,7 +23,7 @@ class EntityRelationExtractor:
     
     def __init__(self, llm, system_template, human_template, 
              entity_types: List[str], relationship_types: List[str],
-             cache_dir="./cache/graph", max_workers=4, batch_size=5):
+             cache_dir="./.cache/graph", max_workers=4, batch_size=5):
         """
         初始化实体关系提取器
         
@@ -132,13 +132,15 @@ class EntityRelationExtractor:
         self.cache_misses += 1
         return None
         
-    def process_chunks(self, file_contents: List[Tuple[str, List[Chunk]]]) -> List[Tuple[str, List[Chunk], List[str]]]:
+    def process_chunks(self, file_contents: List[Tuple[str, List[Chunk]]],
+                       progress_callback=None) -> List[Tuple[str, List[Chunk], List[str]]]:
         """
         并行处理所有文件的 Chunk，用 LLM 提取实体和关系
 
         Args:
             file_contents: [(file_name, [Chunk, ...]), ...]
-
+            progress_callback: 进度回调，每处理一个 chunk 调用一次 callback(index)
+            
         Returns:
             [(file_name, [Chunk, ...], [LLM结果, ...]), ...]
         """
@@ -174,6 +176,8 @@ class EntityRelationExtractor:
                             ordered[i] = result
                             self._save_to_cache(chunks[i].chunk_id, result)
                             processed += 1
+                            if progress_callback:
+                                progress_callback(i)
                         except Exception as exc:
                             print(f'Chunk {chunks[i].chunk_id} 处理异常: {exc}')
                             retry_count = 0

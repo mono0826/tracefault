@@ -156,7 +156,7 @@ def get_graph_stats() -> dict:
         return {"connected": False, "error": str(e)}
 
 
-def run_pipeline(file_paths: list[str] = None, on_status=None, on_log=None) -> dict:
+def run_pipeline(file_paths: list[str] = None, on_status=None, on_log=None, incremental: bool = False) -> dict:
     """执行知识图谱完整构建流程"""
     from backend.integrations.main import KnowledgeGraphProcessor
     if on_log:
@@ -167,6 +167,7 @@ def run_pipeline(file_paths: list[str] = None, on_status=None, on_log=None) -> d
         processor = KnowledgeGraphProcessor()
         processor.process_all(
             file_paths=file_paths,
+            incremental=incremental,
         )
         stats = get_graph_stats()
         if on_status:

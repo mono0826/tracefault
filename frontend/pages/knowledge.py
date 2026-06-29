@@ -45,7 +45,7 @@ def _render_stage_table(stage_results: dict):
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
-def _run_pipeline_ui(document_paths: list[str]):
+def _run_pipeline_ui(document_paths: list[str], incremental: bool = False):
     """执行管道并在 UI 逐步显示进度"""
     neo4j_ok, neo4j_msg = check_neo4j()
     if not neo4j_ok:
@@ -74,6 +74,7 @@ def _run_pipeline_ui(document_paths: list[str]):
         file_paths=document_paths,
         on_status=_on_status,
         on_log=_on_log,
+        incremental=incremental,
     )
 
     status_text.success("管道执行完成" if result["success"] else "管道执行完成，部分阶段有异常")
@@ -268,9 +269,10 @@ with tab_graph:
     with col_mode:
         mode = st.radio(
             "构建模式",
-            [("完整构建（全部步骤）", "full"), ("快速构建（结构→实体→索引）", "fast")],
+            [("全量构建（清除旧数据重建）", "full"), ("增量更新（只处理变更文件）", "incremental")],
             format_func=lambda x: x[0],
             index=0,
+            help="全量：清空所有旧数据重新构建 | 增量：只处理新增和修改的文件，保留已有数据",
         )
 
     if not doc_files:
@@ -279,12 +281,7 @@ with tab_graph:
         with col_btn:
             mode_key = mode[1]
             if st.button("🚀 开始构建", type="primary", use_container_width=True):
-                if mode_key == "full":
-                    _run_pipeline_ui(doc_files)
+                if mode_key == "incremental":
+                    _run_pipeline_ui(doc_files, incremental=True)
                 else:
-                    from frontend.utils.api_client import run_fast_pipeline
-                    result = run_fast_pipeline(file_paths=doc_files)
-                    if result["success"]:
-                        st.success("快速构建完成")
-                    else:
-                        st.error(f"快速构建失败: {result.get('error', '')}")
+                    _run_pipeline_ui(doc_files, incremental=False)

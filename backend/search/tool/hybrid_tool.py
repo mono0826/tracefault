@@ -42,7 +42,7 @@ class HybridSearchTool(BaseSearchTool):
         self.community_level = HYBRID_SEARCH_SETTINGS["community_level"]
         
         # 调用父类构造函数
-        super().__init__(cache_dir="./cache/hybrid_search")
+        super().__init__(cache_dir="./.cache/hybrid_search")
 
         # 设置处理链
         self._setup_chains()

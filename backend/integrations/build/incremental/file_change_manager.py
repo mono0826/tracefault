@@ -33,6 +33,7 @@ class FileChangeManager:
         self.files_dir = Path(files_dir) if files_dir else None
         self.registry_path = Path(registry_path)
         self.registry = self._load_registry()
+        print(f"load registry successfully!")
 
     def _load_registry(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -55,6 +56,7 @@ class FileChangeManager:
         """保存文件注册表到磁盘"""
         with open(self.registry_path, 'w', encoding='utf-8') as f:
             json.dump(self.registry, f, ensure_ascii=False, indent=2)
+        print(f"save registry successfully!")
 
     def _compute_file_hash(self, file_path: Path) -> str:
         """
@@ -87,10 +89,38 @@ class FileChangeManager:
         Returns:
             Dict: 当前文件状态，键为文件名，值为文件元数据
         """
-        scan_dir = Path(directory_path) if directory_path else self.files_dir
         current_files = {}
 
-        if scan_dir and scan_dir.exists():
+
+        # 指定文件路径 → 直接处理
+        if file_paths is not None:
+            print(f"file_paths = {file_paths}")
+
+            paths = [file_paths] if isinstance(file_paths, str) else file_paths
+            for fp_str in paths:
+                fp = Path(fp_str)
+                if not fp.exists() or not fp.is_file():
+                    continue
+                fhash = self._compute_file_hash(fp)
+                if fhash:
+                    key = str(fp.resolve())
+                    current_files[key] = {
+                        "hash": fhash,
+                        "size": fp.stat().st_size,
+                        "last_modified": fp.stat().st_mtime,
+                        "last_scanned": time.time(),
+                    }
+            return current_files
+
+        # 确定扫描目录：优先调用时传入，其次用实例化时传入的
+        scan_dir = Path(directory_path) if directory_path else self.files_dir
+        print(f"directory_path = {directory_path}")
+        print(f"scan_dir = {scan_dir}")
+
+        if scan_dir is None:
+            raise ValueError("请传入 file_paths 或 directory_path")
+
+        if scan_dir.exists():
             for root, _, files in os.walk(scan_dir):
                 for filename in files:
                     fp = Path(root) / filename
@@ -98,22 +128,6 @@ class FileChangeManager:
                     if not fhash:
                         continue
                     current_files[filename] = {
-                        "hash": fhash,
-                        "size": fp.stat().st_size,
-                        "last_modified": fp.stat().st_mtime,
-                        "last_scanned": time.time(),
-                    }
-
-        if file_paths:
-            if isinstance(file_paths, str):
-                file_paths = [file_paths]
-            for fp_str in file_paths:
-                fp = Path(fp_str)
-                if not fp.exists() or not fp.is_file():
-                    continue
-                fhash = self._compute_file_hash(fp)
-                if fhash:
-                    current_files[fp.name] = {
                         "hash": fhash,
                         "size": fp.stat().st_size,
                         "last_modified": fp.stat().st_mtime,
@@ -128,7 +142,7 @@ class FileChangeManager:
         directory_path: Optional[str] = None,
     ) -> Dict[str, List[str]]:
         """
-        检测文件变更（只读，不更新注册表）
+        检测文件变更
 
         Args:
             file_paths: 单个文件路径或文件路径列表
@@ -143,36 +157,28 @@ class FileChangeManager:
         for filename, file_info in current_files.items():
             if filename not in self.registry:
                 added_files.append(filename)
+                self.registry[filename] = file_info
             elif file_info["hash"] != self.registry[filename]["hash"]:
                 modified_files.append(filename)
+                self.registry[filename] = file_info
 
-        for filename in self.registry:
-            if filename not in current_files:
-                deleted_files.append(filename)
+        # 只有扫描目录时才检测删除（指定文件时不删已有记录）
+        if not file_paths:
+            for filename in list(self.registry):
+                if filename not in current_files:
+                    deleted_files.append(filename)
+                    self.registry.pop(filename, None)
 
         return {"added": added_files, "modified": modified_files, "deleted": deleted_files}
 
-    def process(
+    def bulid(
         self,
         file_paths: Optional[Union[str, List[str]]] = None,
         directory_path: Optional[str] = None,
-    ) -> Dict[str, List[str]]:
-        """
-        检测文件变更并更新注册表（detect + update）
-
-        Args:
-            file_paths: 单个文件路径或文件路径列表
-            directory_path: 目录路径
-
-        Returns:
-            Dict: 包含三种变更类型的文件列表：added, modified, deleted
-        """
-        result = self.detect_changes(file_paths, directory_path)
+    ):
         self.registry = self._scan_current_files(file_paths, directory_path)
         self._save_registry()
-
-        print(f"[FileChangeManager] 新增 {len(result['added'])}, 修改 {len(result['modified'])}, 删除 {len(result['deleted'])}")
-        return result
+        
 
     def get_file_metadata(self, file_path: str) -> Dict[str, Any]:
         """
@@ -185,12 +191,6 @@ class FileChangeManager:
             Dict: 文件元数据
         """
         return self.registry.get(file_path, {})
-
-    def update_registry(self):
-        """更新文件注册表，记录当前所有文件的状态"""
-        self.registry = self._scan_current_files()
-        self._save_registry()
-        print(f"文件注册表已更新，共记录 {len(self.registry)} 个文件")
 
     def update_file_status(self, file_path: str, status: Dict[str, Any]):
         """

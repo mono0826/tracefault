@@ -895,8 +895,7 @@ class IncrementalGraphUpdater:
     
     def process_incremental_update(
         self,
-        file_paths: Optional[Union[str, List[str]]] = None,
-        directory_path: Optional[str] = None,
+        changes: Optional[Union[str, List[str]]] = None,
     ) -> Dict[str, Any]:
         """
         执行增量更新流程
@@ -910,10 +909,6 @@ class IncrementalGraphUpdater:
         try:
             # 1. 检测文件变更
             self.console.print("[bold cyan]检测文件变更...[/bold cyan]")
-            changes = self.detect_changes(
-                file_paths=file_paths,
-                directory_path=directory_path
-            )
             
             # 分别处理新增、修改和删除的文件
             added_files = changes.get("added", [])
@@ -950,7 +945,7 @@ class IncrementalGraphUpdater:
                 self.console.print(f"[green]更新的Chunk Embedding: {embedding_stats['chunks']}[/green]")
             
             # 5. 更新文件注册表
-            self.file_manager.update_registry()
+            self.file_manager._save_registry()
             
             # 6. 显示图谱统计信息
             self.console.print("[bold cyan]图谱统计信息[/bold cyan]")

@@ -18,7 +18,7 @@ class NaiveSearchTool(BaseSearchTool):
     def __init__(self):
         """初始化Naive搜索工具"""
         # 调用父类构造函数
-        super().__init__(cache_dir="./cache/naive_search")
+        super().__init__(cache_dir="./.cache/naive_search")
         
         # 搜索参数设置
         self.top_k = NAIVE_SEARCH_TOP_K  # 检索的最大文档数量

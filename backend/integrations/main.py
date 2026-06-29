@@ -38,13 +38,47 @@ class KnowledgeGraphProcessor:
         """
         try:
             if incremental:
-                self._run_incremental(file_paths, directory_path)
+                # 检查是否已有图谱数据，没有则自动切到全量构建
+                try:
+                    from backend.config.neo4jdb import get_db_manager
+                    r = get_db_manager().graph.query("MATCH (e:__Entity__) RETURN count(e) AS c")
+                    has_graph = r and r[0].get("c", 0) > 0
+                except Exception:
+                    has_graph = False
+
+                if not has_graph:
+                    self.console.print("[yellow]未检测到图谱数据，增量更新切换到全量构建模式[/yellow]")
+                    self._run_full(file_paths, directory_path)
+                else:
+                    self._run_incremental(file_paths, directory_path)
             else:
                 self._run_full(file_paths, directory_path)
         except Exception as e:
             error_text = Text(f"处理过程中出现错误: {str(e)}", style="bold red")
             self.console.print(Panel(error_text, border_style="red"))
             raise
+
+    def get_stats(self) -> dict:
+        """获取知识图谱统计（实体、关系、Chunk、社区）"""
+        try:
+            from backend.config.neo4jdb import get_db_manager
+            db = get_db_manager()
+            r = db.graph.query("""
+                MATCH (e:__Entity__) WITH count(e) AS entities
+                MATCH ()-[r]->() WITH entities, count(r) AS relations
+                MATCH (c:__Chunk__) WITH entities, relations, count(c) AS chunks
+                MATCH (m:__Community__) WITH entities, relations, chunks, count(m) AS communities
+                RETURN entities, relations, chunks, communities
+            """)
+            row = r[0] if r else {}
+            return {
+                "entities": row.get("entities", 0),
+                "relations": row.get("relations", 0),
+                "chunks": row.get("chunks", 0),
+                "communities": row.get("communities", 0),
+            }
+        except Exception:
+            return {"entities": 0, "relations": 0, "chunks": 0, "communities": 0}
 
     def _run_full(
         self,
@@ -60,13 +94,27 @@ class KnowledgeGraphProcessor:
 
         self.console.print("\n[bold cyan]步骤 1: 构建基础图谱[/bold cyan]")
         graph_builder = KnowledgeGraphBuilder()
-        graph_builder.process(file_paths=file_paths, directory_path=directory_path)
+        result = graph_builder.process(file_paths=file_paths, directory_path=directory_path)
+
+        if not result:
+            self.console.print("[yellow]步骤 1 未提取到实体，跳过后续步骤[/yellow]")
+            return
 
         self.console.print("\n[bold cyan]步骤 2: 构建实体索引和社区[/bold cyan]")
         IndexCommunityBuilder().process()
 
         self.console.print("\n[bold cyan]步骤 3: 构建Chunk索引[/bold cyan]")
         ChunkIndexBuilder().process()
+
+        # 同步增量更新注册表
+        self.console.print("\n[bold cyan]步骤 4: 构建FileRegistry[/bold cyan]")
+        try:
+            from backend.integrations.build.incremental.file_change_manager import FileChangeManager
+            fcm = FileChangeManager()
+            fcm.bulid(file_paths=file_paths, directory_path=directory_path)
+        except Exception:
+            print(f"bulid failed!")
+            pass
 
         success_text = Text("完整构建完成", style="bold green")
         self.console.print(Panel(success_text, border_style="green"))

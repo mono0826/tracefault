@@ -27,7 +27,7 @@ class LocalSearchTool(BaseSearchTool):
     def __init__(self):
         """初始化本地搜索工具"""
         # 调用父类构造函数
-        super().__init__(cache_dir="./cache/local_search")
+        super().__init__(cache_dir="./.cache/local_search")
         
         # 设置聊天历史，用于连续对话
         self.chat_history = []

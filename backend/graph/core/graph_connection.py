@@ -110,7 +110,19 @@ class GraphConnectionManager:
                             self.graph.query(f"DROP INDEX {index_name} IF EXISTS")
                             print(f"  已删除索引: {index_name} (类型: {index_type})")
                         except Exception as e:
-                            print(f"  删除索引 {index_name} 失败: {e}")
+                            err = str(e)
+                            # 索引属于约束 → 先删约束
+                            if "Index belongs to constraint" in err:
+                                import re as _re
+                                m = _re.search(r"constraint:\s*`([^`]+)`", err)
+                                cname = m.group(1) if m else index_name
+                                try:
+                                    self.graph.query(f"DROP CONSTRAINT {cname} IF EXISTS")
+                                    print(f"  已删除约束: {cname}")
+                                except Exception as e2:
+                                    print(f"  删除约束 {cname} 失败: {e2}")
+                            else:
+                                print(f"  删除索引 {index_name} 失败: {e}")
 
                 print(f"\n索引清理完成，共删除 {len(result)} 个索引")
             else:

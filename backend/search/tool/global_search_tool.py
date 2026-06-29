@@ -38,7 +38,7 @@ class GlobalSearchTool(BaseSearchTool):
         )
         
         # 调用父类构造函数
-        super().__init__(cache_dir="./cache/global_search")
+        super().__init__(cache_dir="./.cache/global_search")
 
         # 设置处理链
         self._setup_chains()

@@ -14,7 +14,7 @@ from backend.config.settings import BASE_SEARCH_CONFIG
 class BaseSearchTool(ABC):
     """搜索工具基础类，为各种搜索实现提供通用功能"""
     
-    def __init__(self, cache_dir: str = "./cache/search"):
+    def __init__(self, cache_dir: str = "./.cache/search"):
         """
         初始化搜索工具
         

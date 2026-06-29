@@ -166,6 +166,7 @@ class KnowledgeGraphBuilder:
                     file_paths=file_paths,
                     directory_path=directory_path,
                 )
+                progress.advance(task)
 
                 self.processed_documents = []
                 for file_name, chunks in file_chunks:
@@ -210,8 +211,75 @@ class KnowledgeGraphBuilder:
 
             self.console.print(f"[blue]共处理 {len(self.processed_documents)} 个文件，总计 {total_length} 字符[/blue]")
             self.console.print(f"[blue]共生成 {total_chunks} 个文本块，平均每块 {avg_chunk_size:.1f} 字符[/blue]")
+
+            if not self.processed_documents:
+                self.console.print("[red]文件处理失败，没有生成任何文档[/red]")
+                return []
             
-            # 2. 构建图结构
+            # 2. 提取实体和关系
+            extract_start = time.time()
+            with self._create_progress() as progress:
+                total_chunks = sum(doc["chunk_count"] for doc in self.processed_documents)
+                task = progress.add_task("[cyan]提取实体和关系...", total=total_chunks)
+                
+                def progress_callback(chunk_index):
+                    progress.advance(task)
+                
+                
+                # 根据数据集大小选择处理方法
+                if total_chunks > 50:
+                    # 对于大型数据集使用批处理模式
+                    processed_file_contents = self.entity_extractor.process_chunks_batch(
+                        file_chunks,
+                        progress_callback
+                    )
+                else:
+                    # 对于小型数据集使用标准并行处理
+                    processed_file_contents = self.entity_extractor.process_chunks(
+                        file_chunks,
+                        progress_callback
+                    )
+                
+                # 将处理结果合并回文档数据
+                file_content_map = {}
+                for processed_file in processed_file_contents:
+                    # processed_file = (file_name, [Chunk, ...], [LLM结果, ...])
+                    if len(processed_file) >= 3:
+                        filename = processed_file[0]
+                        entity_data = processed_file[2]
+                        file_content_map[filename] = entity_data
+                
+                # 使用映射将结果放回到原始文档中
+                for doc in self.processed_documents:
+                    if doc["chunks"]:
+                        filename = doc["filename"]
+                        if filename in file_content_map:
+                            doc["entity_data"] = file_content_map[filename]
+                        else:
+                            self.console.print(f"[yellow]警告: 文件 {filename} 的实体抽取结果未找到[/yellow]")
+                progress.update(task, completed=1)
+
+            self.performance_stats["实体抽取"] = time.time() - extract_start
+            
+            # 输出缓存统计
+            cache_hits = getattr(self.entity_extractor, 'cache_hits', 0)
+            cache_misses = getattr(self.entity_extractor, 'cache_misses', 0)
+            total_requests = cache_hits + cache_misses
+            cache_rate = (cache_hits / total_requests * 100) if total_requests > 0 else 0
+            
+            self.console.print(f"[blue]LLM调用缓存命中率: {cache_rate:.1f}% ({cache_hits}/{total_requests})[/blue]")
+            
+            # 检查是否提取到实体（验证数据中是否包含实体标记）
+            has_entities = any(
+                '("entity"' in str(data) for doc in self.processed_documents
+                if doc.get("entity_data") and isinstance(doc["entity_data"], list)
+                for data in doc["entity_data"]
+            )
+            if not has_entities:
+                self.console.print("[yellow]未提取到任何实体，跳过数据库写入和后续步骤[/yellow]")
+                return []
+
+            # 3. 构建图结构
             struct_start = time.time()
             with self._create_progress() as progress:
                 task = progress.add_task("[cyan]构建图结构...", total=3)
@@ -245,61 +313,10 @@ class KnowledgeGraphBuilder:
                                 doc["filename"], chunks
                             )
                         doc["graph_result"] = result
-                progress.advance(task)
+                progress.update(task, completed=1)
             
             self.performance_stats["图结构构建"] = time.time() - struct_start
-            
-            # 3. 提取实体和关系
-            extract_start = time.time()
-            with self._create_progress() as progress:
-                total_chunks = sum(doc["chunk_count"] for doc in self.processed_documents)
-                task = progress.add_task("[cyan]提取实体和关系...", total=total_chunks)
-                
-                def progress_callback(chunk_index):
-                    progress.advance(task)
-                
-                
-                # 根据数据集大小选择处理方法
-                if total_chunks > 1:
-                    # 对于大型数据集使用批处理模式
-                    processed_file_contents = self.entity_extractor.process_chunks_batch(
-                        file_chunks,
-                        progress_callback
-                    )
-                else:
-                    # 对于小型数据集使用标准并行处理
-                    processed_file_contents = self.entity_extractor.process_chunks(
-                        file_chunks
-                    )
-                
-                # 将处理结果合并回文档数据
-                file_content_map = {}
-                for processed_file in processed_file_contents:
-                    # processed_file = (file_name, [Chunk, ...], [LLM结果, ...])
-                    if len(processed_file) >= 3:
-                        filename = processed_file[0]
-                        entity_data = processed_file[2]
-                        file_content_map[filename] = entity_data
-                
-                # 使用映射将结果放回到原始文档中
-                for doc in self.processed_documents:
-                    if doc["chunks"]:
-                        filename = doc["filename"]
-                        if filename in file_content_map:
-                            doc["entity_data"] = file_content_map[filename]
-                        else:
-                            self.console.print(f"[yellow]警告: 文件 {filename} 的实体抽取结果未找到[/yellow]")
-            
-            self.performance_stats["实体抽取"] = time.time() - extract_start
-            
-            # 输出缓存统计
-            cache_hits = getattr(self.entity_extractor, 'cache_hits', 0)
-            cache_misses = getattr(self.entity_extractor, 'cache_misses', 0)
-            total_requests = cache_hits + cache_misses
-            cache_rate = (cache_hits / total_requests * 100) if total_requests > 0 else 0
-            
-            self.console.print(f"[blue]LLM调用缓存命中率: {cache_rate:.1f}% ({cache_hits}/{total_requests})[/blue]")
-            
+
             # 4. 写入数据库
             write_start = time.time()
             with self._create_progress() as progress:

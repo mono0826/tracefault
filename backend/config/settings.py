@@ -157,7 +157,7 @@ ALIGNMENT_MIN_GROUP_SIZE = _get_env_int("ALIGNMENT_MIN_GROUP_SIZE", 2) or 2
 # ===== 路径与缓存配置 =====
 
 DEFAULT_CACHE_ROOT = Path(
-    os.getenv("CACHE_ROOT", PROJECT_ROOT / "cache")
+    os.getenv("CACHE_ROOT", PROJECT_ROOT / ".cache")
 ).expanduser()
 MODEL_CACHE_ROOT = Path(
     os.getenv("MODEL_CACHE_ROOT", DEFAULT_CACHE_ROOT)

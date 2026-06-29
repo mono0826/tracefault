@@ -36,7 +36,7 @@ class DeepResearchTool(BaseSearchTool):
     
     def __init__(self):
         """初始化深度研究工具"""
-        super().__init__(cache_dir="./cache/deep_research")
+        super().__init__(cache_dir="./.cache/deep_research")
 
         # 关键词缓存
         self._keywords_cache = {}

@@ -98,7 +98,7 @@ class IncrementalUpdateManager:
                 self.console.print(f"[green]新增: {added_count}, 修改: {modified_count}, 删除: {deleted_count}[/green]")
                 
                 # 如果有变更，执行增量更新
-                self.updater.process_incremental_update()
+                self.updater.process_incremental_update(changes)
                 
                 # 如果有文件删除，执行图一致性检查
                 if deleted_count > 0:

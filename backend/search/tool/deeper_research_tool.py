@@ -97,7 +97,7 @@ class DeeperResearchTool:
         
         # 缓存设置
         self.enable_cache = True
-        self.cache_dir = "./cache/deeper_research"
+        self.cache_dir = "./.cache/deeper_research"
         
         # 确保缓存目录存在
         if not os.path.exists(self.cache_dir):

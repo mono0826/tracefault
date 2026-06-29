@@ -77,6 +77,7 @@ class IncrementalUpdateManager:
         
         Returns:
             Dict: 变更信息
+            None: 无变更信息
         """
         self.console.print("[bold cyan]检测文件变更...[/bold cyan]")
         
@@ -109,6 +110,7 @@ class IncrementalUpdateManager:
                 self.stats["files_processed"] += total_changed
             else:
                 self.console.print("[yellow]未检测到文件变更[/yellow]")
+                return None
             
             return changes
             
@@ -132,9 +134,10 @@ class IncrementalUpdateManager:
             
             if entities:
                 self.console.print(f"[green]发现 {len(entities)} 个需要更新Embedding的实体[/green]")
-                
-                # 执行更新
-                updated_count = self.embedding_manager.update_entity_embeddings()
+
+                # 执行更新（传入ID避免重复查询）
+                entity_ids = [e.get("entity_id") for e in entities if e.get("entity_id")]
+                updated_count = self.embedding_manager.update_entity_embeddings(entity_ids)
                 
                 # 更新统计信息
                 self.stats["entities_updated"] += updated_count
@@ -164,10 +167,11 @@ class IncrementalUpdateManager:
             
             if chunks:
                 self.console.print(f"[green]发现 {len(chunks)} 个需要更新Embedding的Chunk[/green]")
-                
-                # 执行更新
-                updated_count = self.embedding_manager.update_chunk_embeddings()
-                
+
+                # 执行更新（传入ID避免重复查询）
+                chunk_ids = [c.get("chunk_id") for c in chunks if c.get("chunk_id")]
+                updated_count = self.embedding_manager.update_chunk_embeddings(chunk_ids)
+
                 return updated_count
             else:
                 self.console.print("[yellow]没有需要更新Embedding的Chunk[/yellow]")
@@ -383,6 +387,9 @@ class IncrementalUpdateManager:
                 file_paths=file_paths,
                 directory_path=directory_path
             )
+            if changes is None:
+                return results
+            
             results["file_changes"] = changes
             
             # 2. 更新实体Embedding

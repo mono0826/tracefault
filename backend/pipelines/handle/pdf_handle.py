@@ -23,9 +23,9 @@ class PdfFileHandler(BaseFileHandler):
                         text += f"[第 {page_num+1} 页无法读取]\n\n"
 
             return Document(
-                file_name=file,
+                file_name=os.path.basename(file),
                 file_type=FileType.PDF,
-                file_path=os.path.basename(file),
+                file_path=file,
                 file_size=os.path.getsize(file),
                 file_content=text,
                 status="success"
@@ -34,9 +34,9 @@ class PdfFileHandler(BaseFileHandler):
         except Exception as e:
             print(f"读取PDF文件 {os.path.basename(file)} 失败: {str(e)}")
             return Document(
-                file_name=file,
+                file_name=os.path.basename(file),
                 file_type=FileType.PDF,
-                file_path=os.path.basename(file),
+                file_path=file,
                 file_size=os.path.getsize(file),
                 file_content=f"[无法读取文件内容: {str(e)}]",
                 status="failed"

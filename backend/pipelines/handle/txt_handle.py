@@ -13,9 +13,9 @@ class TxtFileHandler(BaseFileHandler):
                 content = f.read()
 
             return Document(
-                file_name=file, 
+                file_name=os.path.basename(file), 
                 file_type=FileType.TXT, 
-                file_path=os.path.basename(file), 
+                file_path=file, 
                 file_size=os.path.getsize(file), 
                 file_content=content,
                 status="success"
@@ -37,9 +37,9 @@ class TxtFileHandler(BaseFileHandler):
                     content = f.read()
                 
                 return Document(
-                    file_name=file, 
+                    file_name=os.path.basename(file), 
                     file_type=FileType.TXT, 
-                    file_path=os.path.basename(file), 
+                    file_path=file, 
                     file_size=os.path.getsize(file), 
                     file_content=content,
                     status="success"
@@ -47,9 +47,9 @@ class TxtFileHandler(BaseFileHandler):
             except Exception as e2:
                 print(f"尝试使用其他编码读取失败: {str(e2)}")
                 return Document(
-                    file_name=file,
+                    file_name=os.path.basename(file),
                     file_type=FileType.TXT,
-                    file_path=os.path.basename(file),
+                    file_path=file,
                     file_size=os.path.getsize(file),
                     file_content=f"[无法读取文件内容: {str(e2)}]",
                     status="failed"

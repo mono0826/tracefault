@@ -13,9 +13,9 @@ class MarkdownFileHandler(BaseFileHandler):
                 content = f.read()
 
             return Document(
-                file_name=file,
+                file_name=os.path.basename(file),
                 file_type=FileType.MD,
-                file_path=os.path.basename(file),
+                file_path=file,
                 file_size=os.path.getsize(file),
                 file_content=content,
                 status="success"
@@ -24,9 +24,9 @@ class MarkdownFileHandler(BaseFileHandler):
         except Exception as e:
             print(f"读取Markdown文件 {os.path.basename(file)} 失败: {str(e)}")
             return Document(
-                file_name=file,
+                file_name=os.path.basename(file),
                 file_type=FileType.MD,
-                file_path=os.path.basename(file),
+                file_path=file,
                 file_size=os.path.getsize(file),
                 file_content=f"[无法读取文件内容: {str(e)}]",
                 status="failed"

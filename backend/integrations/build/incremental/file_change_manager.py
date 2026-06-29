@@ -127,7 +127,8 @@ class FileChangeManager:
                     fhash = self._compute_file_hash(fp)
                     if not fhash:
                         continue
-                    current_files[filename] = {
+                    key = str(fp.resolve())
+                    current_files[key] = {
                         "hash": fhash,
                         "size": fp.stat().st_size,
                         "last_modified": fp.stat().st_mtime,

@@ -55,7 +55,7 @@ class Document:
 @dataclass
 class Chunk:
     """文本分块，记录来源文档和块内序号"""
-    file_name: str         # chunk 所在的文件名(Document.file_name)
+    file_path: str         # chunk 所在的文件路径(Document.file_path)
     chunk_id: str = ""     # 唯一标识，空时由 content SHA1 自动生成
     doc_id: str = ""       # 来源文档标识（Document.file_hash）
     content: str = ""      # 分块文本内容
@@ -69,7 +69,7 @@ class Chunk:
         # preview = (self.content[:80] + "...") if len(self.content) > 80 else self.content
         return (
             f"Chunk(\n"
-            f"  file_name : {self.file_name}\n"
+            f"  file_path : {self.file_path}\n"
             f"  chunk_id  : {self.chunk_id}\n"
             f"  doc_id    : {self.doc_id}\n"
             f"  content   : {self.content}\n"

@@ -130,9 +130,9 @@ class FileReader:
             print(f"处理文件: {os.path.basename(file_path)} (类型: {file_ext})")
             return self._handlers[file_ext].process(file_path)
         return Document(
-            file_name=file_path,
+            file_name=os.path.basename(file_path),
             file_type="",
-            file_path=os.path.basename(file_path),
+            file_path=file_path,
             file_size=os.path.getsize(file_path),
             file_content=f"[不支持的格式: {file_ext}]",
             status="failed",

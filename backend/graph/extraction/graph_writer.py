@@ -46,8 +46,8 @@ class GraphWriter:
         Returns:
             GraphDocument: 转换后的图文档对象
         """
-        node_pattern = re.compile(r'\("entity" : "(.+?)" : "(.+?)" : "(.+?)"\)')
-        relationship_pattern = re.compile(r'\("relationship" : "(.+?)" : "(.+?)" : "(.+?)" : "(.+?)" : (.+?)\)')
+        node_pattern = re.compile(r'\("entity"\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*\)')
+        relationship_pattern = re.compile(r'\("relationship"\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*\)')
 
         nodes = {}
         relationships = []
@@ -56,7 +56,7 @@ class GraphWriter:
         try:
             # 解析节点 - 使用缓存提高效率
             for match in node_pattern.findall(result):
-                node_id, node_type, description = match
+                node_id, node_type, description = [s.strip('"\'') for s in match]
                 # 检查节点缓存
                 if node_id in self.node_cache:
                     nodes[node_id] = self.node_cache[node_id]
@@ -71,7 +71,7 @@ class GraphWriter:
 
             # 解析关系
             for match in relationship_pattern.findall(result):
-                source_id, target_id, rel_type, description, weight = match
+                source_id, target_id, rel_type, description, weight = [s.strip('"\'') for s in match]
                 # 确保源节点存在，先检查缓存
                 if source_id not in nodes:
                     if source_id in self.node_cache:
@@ -155,6 +155,7 @@ class GraphWriter:
 
             for _, chunks, extractions in file_contents:
                 for chunk, result in zip(chunks, extractions):
+                    # print(f"chunk = {chunk}")
                     future = executor.submit(
                         self.convert_to_graph_document,
                         chunk.chunk_id,

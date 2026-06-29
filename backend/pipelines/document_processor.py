@@ -60,8 +60,8 @@ class DocumentProcessor:
                 print(f"  {doc.file_name}: 状态为 failed，跳过")
                 continue
             chunks = self._process_single_document(doc)
-            results.append((doc.file_name, chunks))
-            print(f"  {doc.file_name}: {len(chunks)} 个 Chunk")
+            results.append((doc.file_path, chunks))
+            print(f"  {doc.file_path}: {len(chunks)} 个 Chunk")
 
         print(f"分块完成，共处理 {len(results)} 个文件")
         return results

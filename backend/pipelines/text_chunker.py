@@ -74,7 +74,7 @@ class ChineseTextChunker:
         token_chunks = self.chunk_text(doc.file_content)
         return [
             Chunk(
-                file_name=doc.file_name,
+                file_path=doc.file_path,
                 doc_id=doc.file_hash,
                 content="".join(tokens),
             )

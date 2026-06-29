@@ -34,37 +34,41 @@ class GraphStructureBuilder:
             """
         self.graph.query(clear_query)
         
-    def create_document(self, type: str, uri: str, file_name: str, domain: str) -> Dict:
+    def create_document(self, type: str, uri: str, file_name: str, domain: str, file_hash: str = None) -> Dict:
         """
         创建Document节点
-        
+
         Args:
             type: 文档类型
             uri: 文档URI
             file_name: 文件名
             domain: 文档域
-            
+            file_hash: 文件hash值
+
         Returns:
             Dict: 创建的文档节点信息
         """
         query = """
-        MERGE(d:`__Document__` {fileName: $file_name}) 
+        MERGE(d:`__Document__` {fileName: $file_name})
         SET d.type=$type, d.uri=$uri, d.domain=$domain
-        RETURN d;
         """
-        doc = self.graph.query(
-            query,
-            {"file_name": file_name, "type": type, "uri": uri, "domain": domain}
-        )
+        params = {"file_name": file_name, "type": type, "uri": uri, "domain": domain}
+        if file_hash:
+            query += ", d.fileHash = $file_hash"
+            params["file_hash"] = file_hash
+        query += "\nRETURN d;"
+        doc = self.graph.query(query, params)
         return doc
         
-    def create_relation_between_chunks(self, file_name: str, chunks: List[Chunk]) -> List[Dict]:
+    def create_relation_between_chunks(self, file_name: str, chunks: List[Chunk],
+                                        file_hash: str = None) -> List[Dict]:
         """
         创建Chunk节点并建立关系 - 批处理优化版本
 
         Args:
             file_name: 所属文件名
             chunks: Chunk对象列表
+            file_hash: 文件hash值
 
         Returns:
             List[Dict]: 带有ID和文档的块列表
@@ -105,10 +109,11 @@ class GraphStructureBuilder:
                 "pg_content": chunk.content,
                 "position": position,
                 "length": len(chunk.content),
-                "f_name": chunk.file_name,
+                "f_name": chunk.file_path,
                 "previous_id": previous_chunk_id,
                 "content_offset": offset,
-                "tokens": len(chunk.content.split())
+                "tokens": len(chunk.content.split()),
+                "file_hash": chunk.doc_id,
             }
             batch_data.append(chunk_data)
 
@@ -153,7 +158,12 @@ class GraphStructureBuilder:
         """
         if not batch_data:
             return
-            
+        
+        print(f"file_name = {file_name}")
+        print(f"batch_data = {batch_data}")
+        print(f"relationships = {relationships}")
+
+
         # 分离FIRST_CHUNK和NEXT_CHUNK关系
         first_relationships = [r for r in relationships if r.get("type") == "FIRST_CHUNK"]
         next_relationships = [r for r in relationships if r.get("type") == "NEXT_CHUNK"]
@@ -181,7 +191,8 @@ class GraphStructureBuilder:
             c.length = data.length, 
             c.fileName = data.f_name,
             c.content_offset = data.content_offset, 
-            c.tokens = data.tokens
+            c.tokens = data.tokens,
+            c.file_hash = data.file_hash
         WITH c, data
         MATCH (d:`__Document__` {fileName: data.f_name})
         MERGE (c)-[:PART_OF]->(d)
@@ -211,7 +222,8 @@ class GraphStructureBuilder:
             """
             self.graph.query(query_next_chunk, params={"relationships": next_relationships})
     
-    def parallel_process_chunks(self, file_name: str, chunks: List[Chunk], max_workers=None) -> List[Dict]:
+    def parallel_process_chunks(self, file_name: str, chunks: List[Chunk],
+                                 max_workers=None, file_hash: str = None) -> List[Dict]:
         """
         并行处理chunks，提高大量数据的处理速度
 
@@ -219,6 +231,7 @@ class GraphStructureBuilder:
             file_name: 所属文件名
             chunks: Chunk对象列表
             max_workers: 并行工作线程数
+            file_hash: 文件hash值
 
         Returns:
             List[Dict]: 带有ID和文档的块列表
@@ -229,7 +242,7 @@ class GraphStructureBuilder:
         max_workers = max_workers or DEFAULT_MAX_WORKERS
 
         if len(chunks) < 100:  # 对于小数据集，使用标准方法
-            return self.create_relation_between_chunks(file_name, chunks)
+            return self.create_relation_between_chunks(file_name, chunks, file_hash)
         
         # 将chunks分为多个批次
         chunk_batches = []
@@ -286,7 +299,8 @@ class GraphStructureBuilder:
                     "f_name": file_name,
                     "previous_id": previous_chunk_id,
                     "content_offset": offset,
-                    "tokens": len(chunk.content.split())
+                    "tokens": len(chunk.content.split()),
+                    "file_hash": chunk.doc_id,
                 }
                 batch_data.append(chunk_data)
 
@@ -365,15 +379,16 @@ class GraphStructureBuilder:
         query_chunk_part_of = """
             UNWIND $batch_data AS data
             MERGE (c:`__Chunk__` {id: data.id})
-            SET c.text = data.pg_content, 
-                c.position = data.position, 
-                c.length = data.length, 
+            SET c.text = data.pg_content,
+                c.position = data.position,
+                c.length = data.length,
                 c.fileName = data.f_name,
-                c.content_offset = data.content_offset, 
+                c.content_offset = data.content_offset,
                 c.tokens = data.tokens
             WITH data, c
             MATCH (d:`__Document__` {fileName: data.f_name})
             MERGE (c)-[:PART_OF]->(d)
+            SET c.file_hash = d.fileHash
         """
         self.graph.query(query_chunk_part_of, params={"batch_data": batch_data})
         

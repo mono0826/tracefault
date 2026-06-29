@@ -45,7 +45,6 @@ class GraphConsistencyValidator:
         MATCH (e:`__Entity__`)
         WHERE NOT (e)<-[:MENTIONS]-()
           AND NOT e.manual_edit = true
-          AND NOT e.protected = true
         RETURN e.id AS entity_id, count(e) AS count
         """
         
@@ -61,8 +60,7 @@ class GraphConsistencyValidator:
             MATCH (e:`__Entity__`)
             WHERE NOT (e)<-[:MENTIONS]-()
               AND NOT e.manual_edit = true
-              AND NOT e.protected = true
-            RETURN e.id AS entity_id
+                RETURN e.id AS entity_id
             LIMIT 1000
             """
             id_result = self.graph.query(id_query)
@@ -255,7 +253,6 @@ class GraphConsistencyValidator:
         MATCH (e:`__Entity__` {id: entity_id})
         WHERE NOT (e)<-[:MENTIONS]-()
           AND NOT e.manual_edit = true
-          AND NOT e.protected = true
         DELETE e
         RETURN count(*) AS deleted
         """

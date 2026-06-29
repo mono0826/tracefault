@@ -1,6 +1,7 @@
 import time
 import os
 import psutil
+from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional, Union
 
 from rich.console import Console
@@ -284,33 +285,45 @@ class KnowledgeGraphBuilder:
             with self._create_progress() as progress:
                 task = progress.add_task("[cyan]构建图结构...", total=3)
                 
+                # 从FileChangeManager的registry获取每个文件的hash
+                from backend.integrations.build.incremental.file_change_manager import FileChangeManager
+                fcm = FileChangeManager()
+                fcm.bulid(file_paths=file_paths, directory_path=directory_path)
+                file_hash_map = {}
+                for reg_key, reg_info in fcm.registry.items():
+                    if reg_info.get("hash"):
+                        file_hash_map[str(Path(reg_key).resolve())] = reg_info["hash"]
+
                 # 清空并创建Document节点
                 self.struct_builder.clear_database()
                 for doc in self.processed_documents:
-                    if doc["chunks"]:  # 只处理成功分块的文档
+                    if doc["chunks"]:
+                        key = str(Path(doc["filename"]).resolve())
                         self.struct_builder.create_document(
                             type="local",
                             uri=str(directory_path) if directory_path else str(FILES_DIR),
                             file_name=doc["filename"],
-                            domain=theme
+                            domain=theme,
+                            file_hash=file_hash_map.get(key),
                         )
                 progress.advance(task)
-                
+
                 # 创建Chunk节点和关系 - 优化：使用并行处理大文件
                 for doc in self.processed_documents:
-                    if doc["chunks"]:  # 只处理成功分块的文档
-                        # 根据chunks数量选择处理方法
+                    if doc["chunks"]:
+                        key = str(Path(doc["filename"]).resolve())
+                        fhash = file_hash_map.get(key)
                         chunks = doc["chunks"]
                         if doc["chunk_count"] > 100:
-                            # 对于大文件使用并行处理
                             result = self.struct_builder.parallel_process_chunks(
                                 doc["filename"], chunks,
-                                max_workers=os.cpu_count() or 4
+                                max_workers=os.cpu_count() or 4,
+                                file_hash=fhash,
                             )
                         else:
-                            # 对于小文件使用标准批处理
                             result = self.struct_builder.create_relation_between_chunks(
-                                doc["filename"], chunks
+                                doc["filename"], chunks,
+                                file_hash=fhash,
                             )
                         doc["graph_result"] = result
                 progress.update(task, completed=1)

@@ -193,23 +193,34 @@ class IncrementalGraphUpdater:
                     results["files_processed"] = len(processed_documents)
                     self.console.print(f"[green]成功处理 {len(processed_documents)} 个文件[/green]")
 
+                    # 从registry中获取新增文件的hash
+                    filename_hash_map = {}
+                    for added_file in added_files:
+                        fname = Path(added_file).name
+                        info = self.file_manager.registry.get(added_file) or \
+                               self.file_manager.registry.get(fname)
+                        if info:
+                            filename_hash_map[fname] = info.get("hash")
+
                     # 4. 构建图谱结构
                     for doc in processed_documents:
                         if doc["chunks"]:
+                            file_hash = filename_hash_map.get(Path(doc["filename"]).name)
                             # 创建文档节点
                             self.console.print(f"[blue]为文件 {doc['filename']} 创建文档节点[/blue]")
                             self.struct_builder.create_document(
                                 type="local",
                                 uri=str(self.files_dir),
                                 file_name=doc["filename"],
-                                domain="document"
+                                domain="document",
+                                file_hash=file_hash,
                             )
 
                             # 创建chunk节点和关系
                             chunks_count = len(doc['chunks'])
                             self.console.print(f"[blue]为文件 {doc['filename']} 创建 {chunks_count} 个文本块节点[/blue]")
                             doc["graph_result"] = self.struct_builder.create_relation_between_chunks(
-                                doc["filename"], doc["chunks"]
+                                doc["filename"], doc["chunks"], file_hash
                             )
 
                     # 5. 准备实体抽取的数据: [(file_name, [Chunk, ...]), ...]
@@ -545,22 +556,37 @@ class IncrementalGraphUpdater:
         """
         if not changed_files:
             return {"entities": 0, "chunks": 0}
-            
-        # 标记变更文件的Chunk需要更新Embedding
-        marked_chunks = self.embedding_manager.mark_changed_files_chunks(changed_files)
         
+        print(f"changed_files = {changed_files}")
+        # 从FileChangeManager的registry中取hash，先更新Document的fileHash，再标记Chunk
+        marked_chunks = 0
+        filenames = []
+        for filepath in changed_files:
+            filenames.append(filepath)
+            file_name = Path(filepath).name
+            registry_info = self.file_manager.registry.get(filepath) or \
+                            self.file_manager.registry.get(file_name)
+            file_hash = registry_info.get("hash") if registry_info else None
+            if not file_hash:
+                self.console.print(f"[yellow]跳过 {filepath}：注册表中未找到hash[/yellow]")
+                continue
+            # 先更新Document节点的hash（用完整路径匹配）
+            self.graph.query(
+                "MATCH (d:`__Document__` {fileName: $filepath}) SET d.fileHash = $hash",
+                {"filepath": filepath, "hash": file_hash}
+            )
+            # 通过hash匹配Document，标记其Chunk需要更新Embedding
+            marked = self.embedding_manager.mark_document_chunks_for_update(file_hash)
+            marked_chunks += marked
+
         # 查找这些Chunk关联的实体，标记需要更新Embedding
         query = """
         MATCH (c:`__Chunk__`)-[:MENTIONS]->(e:`__Entity__`)
         WHERE c.fileName IN $filenames OR c.needs_reembedding = true
-        SET e.needs_reembedding = true,
-            e.last_updated = datetime()
+        SET e.needs_reembedding = true
         RETURN count(DISTINCT e) AS entity_count
         """
-        
-        # 获取文件名（不包含路径）
-        filenames = [Path(file).name for file in changed_files]
-        
+
         result = self.graph.query(query, params={"filenames": filenames})
         marked_entities = result[0]["entity_count"] if result else 0
         

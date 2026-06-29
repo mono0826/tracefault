@@ -103,12 +103,14 @@ class EmbeddingManager:
         """
         query = """
         MATCH (c:`__Chunk__`)
-        WHERE c.embedding IS NULL 
+        OPTIONAL MATCH (c)-[:PART_OF]->(d:`__Document__`)
+        WITH c, d
+        WHERE c.embedding IS NULL
             OR c.needs_reembedding = true
-            OR (c.last_updated IS NOT NULL AND 
-                (c.last_embedded IS NULL OR c.last_updated > c.last_embedded))
+            OR (d.fileHash IS NOT NULL AND
+                (c.file_hash IS NULL OR c.file_hash <> d.fileHash))
         RETURN elementId(c) AS neo4j_id,
-               c.id AS chunk_id, 
+               c.id AS chunk_id,
                c.text AS text
         LIMIT $limit
         """
@@ -278,8 +280,10 @@ class EmbeddingManager:
                     query = """
                     UNWIND $updates AS update
                     MATCH (c) WHERE elementId(c) = update.neo4j_id
+                    OPTIONAL MATCH (c)-[:PART_OF]->(d:`__Document__`)
                     SET c.embedding = update.embedding,
                         c.last_embedded = datetime(),
+                        c.file_hash = d.fileHash,
                         c.needs_reembedding = false
                     RETURN count(c) AS updated
                     """
@@ -387,8 +391,7 @@ class EmbeddingManager:
         query = """
         UNWIND $entity_ids AS entity_id
         MATCH (e:`__Entity__` {id: entity_id})
-        SET e.needs_reembedding = true,
-            e.last_updated = datetime()
+        SET e.needs_reembedding = true
         RETURN count(e) AS marked
         """
         
@@ -415,8 +418,7 @@ class EmbeddingManager:
         query = """
         UNWIND $chunk_ids AS chunk_id
         MATCH (c:`__Chunk__` {id: chunk_id})
-        SET c.needs_reembedding = true,
-            c.last_updated = datetime()
+        SET c.needs_reembedding = true
         RETURN count(c) AS marked
         """
         
@@ -427,50 +429,50 @@ class EmbeddingManager:
         
         return marked
     
-    def mark_document_chunks_for_update(self, filename: str) -> int:
+    def mark_document_chunks_for_update(self, file_hash: str) -> int:
         """
-        标记文档的所有Chunk需要更新Embedding
-        
+        根据文件hash标记对应文档的所有Chunk需要更新Embedding。
+        调用前需确保 Document 节点的 fileHash 已更新为最新值。
+
         Args:
-            filename: 文件名
-            
+            file_hash: 文件hash值
+
         Returns:
             int: 标记的Chunk数量
         """
         query = """
-        MATCH (d:`__Document__` {fileName: $filename})<-[:PART_OF]-(c:`__Chunk__`)
+        MATCH (d:`__Document__` {fileHash: $file_hash})<-[:PART_OF]-(c:`__Chunk__`)
         SET c.needs_reembedding = true,
-            c.last_updated = datetime()
+            c.file_hash = $file_hash
         RETURN count(c) AS marked
         """
-        
-        result = self.graph.query(query, params={"filename": filename})
+
+        result = self.graph.query(query, params={"file_hash": file_hash})
         marked = result[0]["marked"] if result else 0
-        
-        self.console.print(f"[blue]已标记文件 {filename} 的 {marked} 个Chunk需要更新Embedding[/blue]")
-        
+
+        self.console.print(f"[blue]已标记 hash={file_hash[:12]}... 的 {marked} 个Chunk需要更新Embedding[/blue]")
+
         return marked
     
-    def mark_changed_files_chunks(self, changed_files: List[str]) -> int:
+    def mark_changed_files_chunks(self, file_hashes: List[str]) -> int:
         """
-        标记变更文件的所有Chunk需要更新Embedding
-        
+        根据文件hash列表标记对应文档的所有Chunk需要更新Embedding。
+        调用前需确保 Document 节点的 fileHash 已更新为最新值。
+
         Args:
-            changed_files: 变更的文件列表
-            
+            file_hashes: 文件hash值列表
+
         Returns:
             int: 标记的Chunk数量
         """
-        if not changed_files:
+        if not file_hashes:
             return 0
-            
+
         total_marked = 0
-        for filename in changed_files:
-            # 获取文件名（不包含路径）
-            file_name = filename.split("/")[-1]
-            marked = self.mark_document_chunks_for_update(file_name)
+        for file_hash in file_hashes:
+            marked = self.mark_document_chunks_for_update(file_hash)
             total_marked += marked
-        
+
         return total_marked
     
     def display_stats(self):

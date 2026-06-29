@@ -106,16 +106,6 @@ class KnowledgeGraphProcessor:
         self.console.print("\n[bold cyan]步骤 3: 构建Chunk索引[/bold cyan]")
         ChunkIndexBuilder().process()
 
-        # 同步增量更新注册表
-        self.console.print("\n[bold cyan]步骤 4: 构建FileRegistry[/bold cyan]")
-        try:
-            from backend.integrations.build.incremental.file_change_manager import FileChangeManager
-            fcm = FileChangeManager()
-            fcm.bulid(file_paths=file_paths, directory_path=directory_path)
-        except Exception:
-            print(f"bulid failed!")
-            pass
-
         success_text = Text("完整构建完成", style="bold green")
         self.console.print(Panel(success_text, border_style="green"))
 

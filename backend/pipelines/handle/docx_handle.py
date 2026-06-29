@@ -16,9 +16,9 @@ class DocxFileHandler(BaseFileHandler):
             content = '\n'.join(full_text)
 
             return Document(
-                file_name=file,
+                file_name=os.path.basename(file),
                 file_type=FileType.DOCX,
-                file_path=os.path.basename(file),
+                file_path=file,
                 file_size=os.path.getsize(file),
                 file_content=content,
                 status="success"
@@ -26,9 +26,9 @@ class DocxFileHandler(BaseFileHandler):
         except Exception as e:
             print(f"读取Word文档(.docx) {os.path.basename(file)} 失败: {str(e)}")
             return Document(
-                file_name=file,
+                file_name=os.path.basename(file),
                 file_type=FileType.DOCX,
-                file_path=os.path.basename(file),
+                file_path=file,
                 file_size=os.path.getsize(file),
                 file_content=f"[无法读取Word文档内容: {str(e)}]",
                 status="failed"

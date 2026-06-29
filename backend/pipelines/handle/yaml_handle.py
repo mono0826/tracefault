@@ -15,9 +15,9 @@ class YamlFileHandler(BaseFileHandler):
             content = yaml.dump(data, allow_unicode=True, default_flow_style=False)
 
             return Document(
-                file_name=file,
+                file_name=os.path.basename(file),
                 file_type=FileType.YAML,
-                file_path=os.path.basename(file),
+                file_path=file,
                 file_size=os.path.getsize(file),
                 file_content=content,
                 status="success"
@@ -25,9 +25,9 @@ class YamlFileHandler(BaseFileHandler):
         except Exception as e:
             print(f"读取YAML文件 {os.path.basename(file)} 失败: {str(e)}")
             return Document(
-                file_name=file,
+                file_name=os.path.basename(file),
                 file_type=FileType.YAML,
-                file_path=os.path.basename(file),
+                file_path=file,
                 file_size=os.path.getsize(file),
                 file_content=f"[无法读取YAML文件内容: {str(e)}]",
                 status="failed"

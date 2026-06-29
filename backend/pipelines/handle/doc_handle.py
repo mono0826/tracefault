@@ -29,9 +29,9 @@ class DocFileHandler(BaseFileHandler):
             if content and content.strip():
                 print(f"使用win32com成功读取.doc文件")
                 return Document(
-                    file_name=file,
+                    file_name=os.path.basename(file),
                     file_type=FileType.DOC,
-                    file_path=os.path.basename(file),
+                    file_path=file,
                     file_size=os.path.getsize(file),
                     file_content=content,
                     status="success"
@@ -50,9 +50,9 @@ class DocFileHandler(BaseFileHandler):
             if content and content.strip():
                 print(f"使用textract成功读取.doc文件")
                 return Document(
-                    file_name=file,
+                    file_name=os.path.basename(file),
                     file_type=FileType.DOC,
-                    file_path=os.path.basename(file),
+                    file_path=file,
                     file_size=os.path.getsize(file),
                     file_content=content,
                     status="success"
@@ -75,9 +75,9 @@ class DocFileHandler(BaseFileHandler):
             if content and content.strip():
                 print(f"使用python-docx部分读取.doc文件成功")
                 return Document(
-                    file_name=file,
+                    file_name=os.path.basename(file),
                     file_type=FileType.DOC,
-                    file_path=os.path.basename(file),
+                    file_path=file,
                     file_size=os.path.getsize(file),
                     file_content=content,
                     status="success"
@@ -91,9 +91,9 @@ class DocFileHandler(BaseFileHandler):
         warning_msg = f"[警告: 无法读取.doc文件 {os.path.basename(file)}，请安装相关依赖或转换为.docx格式]"
         print(warning_msg)
         return Document(
-            file_name=file,
+            file_name=os.path.basename(file),
             file_type=FileType.DOC,
-            file_path=os.path.basename(file),
+            file_path=file,
             file_size=os.path.getsize(file),
             file_content=warning_msg,
             status="failed"

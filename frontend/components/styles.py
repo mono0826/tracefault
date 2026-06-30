@@ -574,11 +574,25 @@ def custom_css():
     div[data-testid="stDataFrame"] { border: 1px solid var(--ind-border); border-radius: var(--ind-radius); }
 
     /* 已处理文档表格 */
+    .doc-table-block { margin-bottom: 4px; }
     .doc-table-wrap {
-        overflow-x: auto;
         border: 1px solid var(--ind-border);
         border-radius: var(--ind-radius);
         background: var(--ind-surface);
+    }
+    .doc-table-scroll {
+        --doc-table-row-h: 41px;
+        --doc-table-head-h: 41px;
+        max-height: calc(var(--doc-table-head-h) + var(--doc-table-row-h) * 14);
+        overflow-x: auto;
+        overflow-y: auto;
+    }
+    .doc-table-scroll .doc-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f8fafc;
+        box-shadow: 0 1px 0 var(--ind-border);
     }
     .doc-table-embedded {
         overflow-x: auto;
@@ -607,7 +621,7 @@ def custom_css():
         text-align: center;
     }
     .doc-table td { text-align: left; }
-    .doc-table tbody tr:last-child td { border-bottom: none; }
+    .doc-table tbody tr:last-child td { border-bottom: 1px solid var(--ind-border); }
     .doc-table th:first-child,
     .doc-table td:first-child {
         width: 56px;
@@ -620,5 +634,11 @@ def custom_css():
     .doc-table td:nth-child(2) { width: 36%; }
     .doc-table th:nth-child(3),
     .doc-table td:nth-child(3) { width: auto; }
+    .doc-table-foot {
+        margin: 8px 2px 0;
+        font-size: 12px;
+        color: var(--ind-text-muted);
+        text-align: right;
+    }
     </style>
     """, unsafe_allow_html=True)

@@ -197,21 +197,21 @@ with tab_visual:
 
         with ctrl_col:
             with st.container(border=True, height=KG_VIS_PANEL_HEIGHT):
+                gstats = get_graph_stats()
+                if gstats.get("connected"):
+                    section_header("图谱统计")
+                    metrics_row([
+                        ("🏷️", "实体", gstats.get("entities", 0)),
+                        ("🔗", "关系", gstats.get("total_relations", 0)),
+                    ], columns=2)
+
+                st.markdown("---")
                 section_header("控制面板")
                 limit = st.number_input("节点上限", min_value=50, max_value=500, value=200, step=50)
                 refresh = st.button("🔄 刷新图谱", type="primary", width="stretch")
 
                 st.markdown("---")
                 render_display_settings()
-
-                gstats = get_graph_stats()
-                if gstats.get("connected"):
-                    st.markdown("---")
-                    st.caption("图谱统计")
-                    metrics_row([
-                        ("🏷️", "实体", gstats.get("entities", 0)),
-                        ("🔗", "关系", gstats.get("total_relations", 0)),
-                    ], columns=2)
 
         if "kg_cache" not in st.session_state:
             st.session_state.kg_cache = None

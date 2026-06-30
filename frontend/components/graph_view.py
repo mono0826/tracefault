@@ -7,6 +7,8 @@ import base64
 import streamlit as st
 from pyvis.network import Network
 
+from frontend.components.layout import section_header
+
 KG_VIS_PANEL_HEIGHT = 780
 
 KG_COLORS = [
@@ -27,10 +29,9 @@ def _read_display_settings() -> dict:
 
 
 def render_display_settings():
-    """显示设置 — 位于控制面板下方"""
-    st.markdown("#### ⚙️ 显示设置")
-    # 第一行：物理引擎
-    st.checkbox("物理引擎", value=True, key="kg_physics")
+    """物理引擎与显示参数 — 位于控制面板下方"""
+    st.session_state.setdefault("kg_physics", True)
+    section_header("物理引擎")
     # 第二行：节点大小
     st.slider("节点大小", 10, 50, 25, key="kg_node_size")
     # 第三行：连线宽度 + 弹簧长度

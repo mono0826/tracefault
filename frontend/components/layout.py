@@ -78,18 +78,23 @@ def info_banner(text: str, variant: str = "info"):
     st.markdown(f'<div class="info-banner info-banner-{variant}">{text}</div>', unsafe_allow_html=True)
 
 
-def render_doc_table(docs: list[dict], *, embedded: bool = False):
-    """已处理文档表格 — 序号列固定窄宽，标题/源文件按比例分配"""
+def render_doc_table(docs: list[dict], *, embedded: bool = False, max_visible_rows: int = 14):
+    """已处理文档表格 — 序号列固定窄宽；超出 max_visible_rows 行时容器内滚动"""
     rows = "".join(
         f"<tr><td>{i}</td><td>{html.escape(d.get('title', ''))}</td>"
         f"<td>{html.escape(d.get('source_file', ''))}</td></tr>"
         for i, d in enumerate(docs, 1)
     )
-    wrap_cls = "doc-table-embedded" if embedded else "doc-table-wrap"
+    wrap_cls = "doc-table-embedded" if embedded else "doc-table-wrap doc-table-scroll"
+    count = len(docs)
     st.markdown(
-        f'<div class="{wrap_cls}"><table class="doc-table">'
+        f'<div class="doc-table-block">'
+        f'<div class="{wrap_cls}" data-max-rows="{max_visible_rows}">'
+        f'<table class="doc-table">'
         f"<thead><tr><th>序号</th><th>标题</th><th>源文件</th></tr></thead>"
-        f"<tbody>{rows}</tbody></table></div>",
+        f"<tbody>{rows}</tbody></table></div>"
+        f'<p class="doc-table-foot">当前已处理文档：{count} 篇</p>'
+        f"</div>",
         unsafe_allow_html=True,
     )
 

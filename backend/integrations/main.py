@@ -63,6 +63,15 @@ class KnowledgeGraphProcessor:
             self.console.print(Panel(error_text, border_style="red"))
             raise
 
+    def has_graph(self) -> bool:
+        """检查是否已构建知识图谱"""
+        try:
+            from backend.config.neo4jdb import get_db_manager
+            r = get_db_manager().graph.query("MATCH (e:__Entity__) RETURN count(e) AS c LIMIT 1")
+            return r and r[0].get("c", 0) > 0
+        except Exception:
+            return False
+
     def update_graph(self):
         self.incremental_updater.update()
 

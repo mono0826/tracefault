@@ -55,7 +55,9 @@ def _get_env_choice(key: str, choices: set[str], default: str) -> str:
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # graphrag_agent包目录
 PROJECT_ROOT = BASE_DIR.parent  # 项目根目录
-FILES_DIR = PROJECT_ROOT / "data/test/"
+DATA_DIR = PROJECT_ROOT / "data" # 数据路径
+FILES_DIR = DATA_DIR / "test" # 数据文件夹路径
+UPLOAD_FILES_DIR = DATA_DIR / "upload" # 上传文件夹路径
 FILE_REGISTRY_PATH = PROJECT_ROOT / "file_registry.json"  # 文件注册表路径
 VECTOR_STORE_PATH = PROJECT_ROOT / "data/vector_store/"  # 向量存储路径
 

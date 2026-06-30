@@ -83,15 +83,33 @@ class GraphConnectionManager:
 
     def drop_all_indexes(self) -> None:
         """
-        删除所有索引（包括普通索引和向量索引）
+        删除所有索引和约束（包括普通索引和向量索引）
         在开始构建流程前调用，确保清理所有旧索引
         """
         print("\n" + "="*60)
-        print("开始清理所有索引...")
+        print("开始清理所有索引与约束...")
         print("="*60)
 
+        # 先删所有约束（因为索引可能属于约束）
         try:
-            # 获取所有索引
+            constraints = self.graph.query("""
+                SHOW CONSTRAINTS
+                YIELD name, type
+                RETURN name, type
+            """)
+            for c in constraints:
+                cname = c.get("name")
+                if cname:
+                    try:
+                        self.graph.query(f"DROP CONSTRAINT {cname} IF EXISTS")
+                        print(f"  已删除约束: {cname}")
+                    except Exception as e:
+                        print(f"  删除约束 {cname} 失败: {e}")
+        except Exception as e:
+            print(f"获取约束列表时出错: {e}")
+
+        # 再删所有索引
+        try:
             result = self.graph.query("""
                 SHOW INDEXES
                 YIELD name, type
@@ -110,21 +128,9 @@ class GraphConnectionManager:
                             self.graph.query(f"DROP INDEX {index_name} IF EXISTS")
                             print(f"  已删除索引: {index_name} (类型: {index_type})")
                         except Exception as e:
-                            err = str(e)
-                            # 索引属于约束 → 先删约束
-                            if "Index belongs to constraint" in err:
-                                import re as _re
-                                m = _re.search(r"constraint:\s*`([^`]+)`", err)
-                                cname = m.group(1) if m else index_name
-                                try:
-                                    self.graph.query(f"DROP CONSTRAINT {cname} IF EXISTS")
-                                    print(f"  已删除约束: {cname}")
-                                except Exception as e2:
-                                    print(f"  删除约束 {cname} 失败: {e2}")
-                            else:
-                                print(f"  删除索引 {index_name} 失败: {e}")
+                            print(f"  删除索引 {index_name} 失败: {e}")
 
-                print(f"\n索引清理完成，共删除 {len(result)} 个索引")
+                print(f"\n索引清理完成，共清理 {len(result)} 个索引")
             else:
                 print("未发现任何索引")
 
@@ -132,15 +138,10 @@ class GraphConnectionManager:
             print(f"获取索引列表时出错: {e}")
             print("尝试删除常见的索引名称...")
 
-            # 备用方案：尝试删除常见的索引
             common_indexes = [
-                "chunk_embedding",
-                "chunk_vector",
-                "entity_embedding",
-                "entity_vector",
-                "vector"
+                "chunk_embedding", "chunk_vector",
+                "entity_embedding", "entity_vector", "vector"
             ]
-
             for index_name in common_indexes:
                 try:
                     self.graph.query(f"DROP INDEX {index_name} IF EXISTS")

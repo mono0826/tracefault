@@ -47,7 +47,7 @@ class GraphWriter:
             GraphDocument: 转换后的图文档对象
         """
         node_pattern = re.compile(r'\("entity"\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*\)')
-        relationship_pattern = re.compile(r'\("relationship"\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*\)')
+        relationship_pattern = re.compile(r'\("relationship"\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*([^:]+?)\s*\)')
 
         nodes = {}
         relationships = []
@@ -98,6 +98,10 @@ class GraphWriter:
                         nodes[target_id] = new_node
                         self.node_cache[target_id] = new_node
                     
+                try:
+                    w = float(weight.strip('"\''))
+                except ValueError:
+                    w = 1.0
                 relationships.append(
                     Relationship(
                         source=nodes[source_id],
@@ -105,7 +109,7 @@ class GraphWriter:
                         type=rel_type,
                         properties={
                             "description": description,
-                            "weight": float(weight.strip('"\''))
+                            "weight": w,
                         }
                     )
                 )

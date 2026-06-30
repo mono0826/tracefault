@@ -1,5 +1,6 @@
 """知识管理页面 — 上传文档处理到知识库 + 构建知识图谱"""
 
+import os
 import sys
 from pathlib import Path
 
@@ -12,13 +13,14 @@ if _project_root not in sys.path:
 
 from backend.pipelines.document_processor import DocumentProcessor
 from backend.integrations.main import KnowledgeGraphProcessor
-from backend.config.settings import PROJECT_ROOT
+from backend.config.settings import UPLOAD_FILES_DIR
 from backend.config.neo4jdb import get_db_manager
 
 from frontend.utils.api_client import (
     run_pipeline,
     run_fast_pipeline,
     check_neo4j,
+    check_has_graph,
     get_graph_stats,
     get_graph_data,
     update_graph,
@@ -26,9 +28,7 @@ from frontend.utils.api_client import (
 )
 from frontend.components.graph_view import visualize_graph
 
-DOCUMENTS_DIR = PROJECT_ROOT / "data" / "documents"
-DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
-
+UPLOAD_FILES_DIR.mkdir(parents=True, exist_ok=True)
 
 # =============================================================
 #  图构建 UI
@@ -100,6 +100,8 @@ def _run_pipeline_ui(document_paths: list[str] = None, directory_path: str = Non
     if result.get("error"):
         st.error(f"管道异常: {result['error']}")
 
+    st.rerun()
+
 
 def _process_document(file_path: str) -> dict:
     """处理单个文档"""
@@ -116,9 +118,12 @@ def _get_stats() -> dict:
     """获取知识库统计"""
     try:
         db = get_db_manager()
-        r = db.graph.query("MATCH (c:__Chunk__) RETURN count(c) AS chunks")
-        chunks = r[0]["chunks"] if r else 0
-        return {"documents": 0, "chunks": chunks, "vector_dim": 0}
+        r = db.graph.query("""
+            MATCH (d:__Document__) WITH count(d) AS documents
+            OPTIONAL MATCH (c:__Chunk__) RETURN documents, count(c) AS chunks
+        """)
+        row = r[0] if r else {}
+        return {"documents": row.get("documents", 0), "chunks": row.get("chunks", 0), "vector_dim": 0}
     except Exception:
         return {"documents": 0, "chunks": 0, "vector_dim": 0}
 
@@ -128,7 +133,7 @@ def _list_docs() -> list:
     try:
         db = get_db_manager()
         result = db.graph.query("MATCH (d:__Document__) RETURN d.fileName AS file_name")
-        return [{"title": r["file_name"], "source_file": r["file_name"]} for r in result]
+        return [{"title": os.path.basename(r["file_name"]), "source_file": r["file_name"]} for r in result]
     except Exception:
         return []
 
@@ -160,20 +165,19 @@ with tab_docs:
             new_files = [f for f in uploaded_files if f.name not in st.session_state[processed_key]]
 
             if new_files:
+                doc_paths = []
                 for f in new_files:
-                    (DOCUMENTS_DIR / f.name).write_bytes(f.getbuffer())
-
-                st.info(f"已保存 {len(new_files)} 个文件，正在解析...")
-
-                pbar = st.progress(0, text="处理中...")
-                for i, f in enumerate(new_files):
-                    pbar.progress((i + 1) / len(new_files), text=f"处理: {f.name}")
-                    result = _process_document(str(DOCUMENTS_DIR / f.name))
+                    save_path = UPLOAD_FILES_DIR / f.name
+                    save_path.write_bytes(f.getbuffer())
+                    doc_paths.append(str(save_path))
                     st.session_state[processed_key].add(f.name)
-                    if result["status"] == "success":
-                        st.success(f"✅ {f.name} — {result['chunk_count']} 个 Chunk")
-                    else:
-                        st.error(f"❌ {f.name} — {result['message']}")
+
+                st.info(f"已上传 {len(new_files)} 个文件，增量构建知识图谱...")
+                _run_pipeline_ui(
+                    document_paths=doc_paths, 
+                    incremental=True
+                )
+                st.rerun()
 
         if st.button("🔄 刷新统计"):
             st.rerun()
@@ -189,7 +193,9 @@ with tab_docs:
     if docs:
         df = pd.DataFrame(docs)
         df.columns = ["标题", "源文件"]
-        st.dataframe(df, width="stretch", hide_index=True)
+        df.insert(0, "序号", range(1, len(df) + 1))
+        st.dataframe(df, hide_index=True,
+                     column_config={"序号": st.column_config.NumberColumn(width="small")})
     else:
         st.info("知识库为空，请上传文档")
 
@@ -284,10 +290,9 @@ with tab_graph:
             key="graph_doc_uploader",
         )
         if uploaded_files:
-            tmp_dir = PROJECT_ROOT / "data" / "temp_graph_input"
-            tmp_dir.mkdir(parents=True, exist_ok=True)
+            print(f"uploaded_files = {uploaded_files}")
             for f in uploaded_files:
-                save_path = tmp_dir / f.name
+                save_path = UPLOAD_FILES_DIR / f.name
                 save_path.write_bytes(f.getbuffer())
                 doc_files.append(str(save_path))
             st.caption(f"已选择 {len(doc_files)} 个文件")
@@ -323,6 +328,8 @@ with tab_visual:
     neo4j_ok, neo4j_msg = check_neo4j()
     if not neo4j_ok:
         st.warning(f"⚠️ Neo4j 不可用: {neo4j_msg}")
+    elif not check_has_graph():
+        st.warning("⚠️ 知识图谱尚未构建，请先在「知识图谱构建」中构建图谱")
     else:
         col_left, col_right = st.columns([3, 1])
         with col_right:

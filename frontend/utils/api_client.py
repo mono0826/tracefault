@@ -211,12 +211,30 @@ def get_graph_stats() -> dict:
         return {"connected": False, "error": str(e)}
 
 
+# 全局单例，避免每次点击都重新初始化
+_processor = None
+
+
+def _get_processor():
+    global _processor
+    if _processor is None:
+        from backend.integrations.main import KnowledgeGraphProcessor
+        _processor = KnowledgeGraphProcessor()
+    return _processor
+
+
+def check_has_graph() -> bool:
+    """检查知识图谱是否已构建"""
+    try:
+        return _get_processor().has_graph()
+    except Exception:
+        return False
+
+
 def update_graph() -> dict:
     """更新图谱（Embedding、社区检测等，不检测文件变更）"""
-    from backend.integrations.main import KnowledgeGraphProcessor
     try:
-        processor = KnowledgeGraphProcessor()
-        processor.update_graph()
+        _get_processor().update_graph()
         return {"success": True}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -224,13 +242,12 @@ def update_graph() -> dict:
 
 def run_pipeline(file_paths: list[str] = None, directory_path: str = None, on_status=None, on_log=None, incremental: bool = False) -> dict:
     """执行知识图谱完整构建流程"""
-    from backend.integrations.main import KnowledgeGraphProcessor
     if on_log:
         on_log("开始知识图谱构建流程...")
     if on_status:
         on_status("初始化...", 0.0)
     try:
-        processor = KnowledgeGraphProcessor()
+        processor = _get_processor()
         processor.process_all(
             file_paths=file_paths,
             directory_path=directory_path,

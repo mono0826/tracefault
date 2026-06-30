@@ -26,14 +26,7 @@ env/
 *.env.local
 
 # Data
-data/documents/*
-data/vector_store/*
-data/test/*
-data/*.db
-data/*.sqlite
-!data/documents/.gitkeep
-!data/vector_store/.gitkeep
-!data/test/.gitkeep
+data/*
 
 # Coverage
 .coverage
@@ -54,6 +47,5 @@ Thumbs.db
 .cache/
 
 # Temp
-data/temp_graph_input/
 file_registry.json
 tests/*.py

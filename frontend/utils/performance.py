@@ -107,7 +107,7 @@ def display_performance_stats():
             rows.append({"端点": ep, "调用次数": count, "总时间(s)": t_total, "平均时间(s)": t_avg})
 
         df = pd.DataFrame(rows).sort_values("调用次数", ascending=False)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
 
         # 柱状图
         if len(df) > 1:

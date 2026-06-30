@@ -16,7 +16,7 @@ import json
 import datetime
 import streamlit as st
 
-from backend.agents.qa_agent import naive_rag, local_search_agent
+from backend.agents.qa_agent import naive_rag, local_search_agent, intent_rag
 from backend.config.settings import PROJECT_ROOT
 from backend.config.neo4jdb import get_db_manager
 
@@ -26,6 +26,7 @@ from backend.config.neo4jdb import get_db_manager
 _AGENT_MAP = {
     "naive_rag_agent": naive_rag,
     "local_search_agent": local_search_agent,
+    "intent_rag_agent": intent_rag,
 }
 
 
@@ -211,6 +212,31 @@ def get_graph_stats() -> dict:
         return {"connected": False, "error": str(e)}
 
 
+def get_library_stats() -> dict:
+    """获取知识库文档/Chunk 统计"""
+    try:
+        db = get_db_manager()
+        r = db.graph.query("""
+            MATCH (d:__Document__) WITH count(d) AS documents
+            OPTIONAL MATCH (c:__Chunk__) RETURN documents, count(c) AS chunks
+        """)
+        row = r[0] if r else {}
+        return {"documents": row.get("documents", 0), "chunks": row.get("chunks", 0), "vector_dim": 0}
+    except Exception:
+        return {"documents": 0, "chunks": 0, "vector_dim": 0}
+
+
+def list_docs() -> list:
+    """列出已入库文档"""
+    import os
+    try:
+        db = get_db_manager()
+        result = db.graph.query("MATCH (d:__Document__) RETURN d.fileName AS file_name")
+        return [{"title": os.path.basename(r["file_name"]), "source_file": r["file_name"]} for r in result]
+    except Exception:
+        return []
+
+
 # 全局单例，避免每次点击都重新初始化
 _processor = None
 
@@ -240,28 +266,90 @@ def update_graph() -> dict:
         return {"success": False, "error": str(e)}
 
 
-def run_pipeline(file_paths: list[str] = None, directory_path: str = None, on_status=None, on_log=None, incremental: bool = False) -> dict:
-    """执行知识图谱完整构建流程"""
+def run_pipeline(
+    file_paths: list[str] = None,
+    directory_path: str = None,
+    on_status=None,
+    on_log=None,
+    on_step_start=None,
+    on_step_end=None,
+    incremental: bool = False,
+) -> dict:
+    """分步执行知识图谱构建，并通过回调汇报进度"""
     if on_log:
-        on_log("开始知识图谱构建流程...")
+        on_log("[INFO] 开始知识图谱构建流程...")
     if on_status:
         on_status("初始化...", 0.0)
+
     try:
+        from backend.graph.core import connection_manager
+        from frontend.utils.log_bridge import bridge_pipeline_logs
+
         processor = _get_processor()
-        processor.process_all(
-            file_paths=file_paths,
-            directory_path=directory_path,
-            incremental=incremental,
-        )
+
+        with bridge_pipeline_logs(processor, on_log):
+            if incremental:
+                if on_step_start:
+                    on_step_start("graph", "增量更新：检测变更文件...", 0.15)
+                processor.process_all(
+                    file_paths=file_paths,
+                    directory_path=directory_path,
+                    incremental=True,
+                )
+                if on_step_end:
+                    on_step_end("clear", True, skipped=True)
+                    for sid in ("graph", "index", "chunk"):
+                        on_step_end(sid, True)
+            else:
+                if on_step_start:
+                    on_step_start("clear", "步骤 1/4：清除旧索引...", 0.08)
+                connection_manager.drop_all_indexes()
+                if on_step_end:
+                    on_step_end("clear", True)
+
+                if on_step_start:
+                    on_step_start("graph", "步骤 2/4：构建图结构...", 0.25)
+                result = processor.graph_builder.process(
+                    file_paths=file_paths, directory_path=directory_path,
+                )
+                if on_step_end:
+                    on_step_end("graph", bool(result))
+
+                if result:
+                    if on_step_start:
+                        on_step_start("index", "步骤 3/4：实体索引与社区...", 0.55)
+                    processor.index_community_builder.process()
+                    if on_step_end:
+                        on_step_end("index", True)
+
+                    if on_step_start:
+                        on_step_start("chunk", "步骤 4/4：Chunk 索引...", 0.82)
+                    processor.chunk_index_builder.process()
+                    if on_step_end:
+                        on_step_end("chunk", True)
+                else:
+                    for sid in ("index", "chunk"):
+                        if on_step_end:
+                            on_step_end(sid, True, skipped=True)
+
         stats = get_graph_stats()
+        if on_log:
+            on_log(f"[DONE] 构建完成 — 实体 {stats.get('entities', 0)}，关系 {stats.get('total_relations', 0)}")
         if on_status:
             on_status("构建完成", 1.0)
-        return {"success": True, "stats": stats, "stage_results": {"build_graph": True, "build_index": True, "build_chunk_index": True}}
+        return {
+            "success": True,
+            "stats": stats,
+            "stage_results": {"build_graph": True, "build_index": True, "build_chunk_index": True},
+        }
     except Exception as e:
         if on_log:
-            on_log(f"构建失败: {e}")
+            on_log(f"[ERROR] 构建失败: {e}")
         if on_status:
             on_status("构建失败", 1.0)
+        cur = st.session_state.get("kg_pipeline_current")
+        if cur and on_step_end:
+            on_step_end(cur, False)
         return {"success": False, "error": str(e), "stats": get_graph_stats(), "stage_results": {}}
 
 

@@ -54,6 +54,56 @@ def display_source_content(content: str):
     st.markdown(f'<div class="source-content">{formatted}</div>', unsafe_allow_html=True)
 
 
+def build_enriched_query(user_prompt: str, equipment_type: str = "",
+                         equipment_id: str = "", fault_severity: str = "") -> str:
+    """将诊断上下文拼接到用户问题（仅在有上下文时生效，不影响纯问答行为）"""
+    parts = []
+    if equipment_type and equipment_type != "未指定":
+        parts.append(f"设备类型: {equipment_type}")
+    if equipment_id and equipment_id.strip():
+        parts.append(f"设备编号: {equipment_id.strip()}")
+    if fault_severity and fault_severity != "未指定":
+        parts.append(f"故障等级: {fault_severity}")
+    if not parts:
+        return user_prompt
+    return "【诊断上下文】" + "；".join(parts) + "\n【故障描述】" + user_prompt
+
+
+def sanitize_answer_text(content: str) -> str:
+    """移除回答末尾的原始检索元数据（如 {'data': {'Chunks': [...]}}），保留正文"""
+    if not isinstance(content, str) or not content.strip():
+        return content or ""
+
+    text = content
+    # 移除末尾 data 元数据块（单/双引号、多行）
+    text = re.sub(
+        r"\n*\{['\"]data['\"]\s*:\s*\{.*?\}\s*\}\s*$",
+        "",
+        text,
+        flags=re.DOTALL,
+    )
+    text = re.sub(
+        r"\n*\{'data':\s*\{.*?\}\s*\}\s*$",
+        "",
+        text,
+        flags=re.DOTALL,
+    )
+
+    cleaned_lines = []
+    for line in text.split("\n"):
+        s = line.strip()
+        if s.startswith("{'data':") or s.startswith('{"data":'):
+            continue
+        if s.startswith("引用数据") or s.startswith("引用来源"):
+            continue
+        cleaned_lines.append(line)
+
+    result = "\n".join(cleaned_lines).strip()
+    if not result and content.strip():
+        return "暂无有效回答，请尝试换一种描述方式或检查知识库是否已构建。"
+    return result
+
+
 def process_thinking_content(content: str, show_thinking: bool = False) -> dict:
     """处理带有 <think> 标签的思考过程内容"""
     if not isinstance(content, str):

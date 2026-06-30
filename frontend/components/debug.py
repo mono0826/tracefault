@@ -188,11 +188,15 @@ def _display_performance():
 # =============================================================
 
 def display_debug_panel():
-    """显示调试面板（不含知识图谱相关标签）"""
-    st.subheader("🔍 调试信息")
+    """显示调试面板"""
+    st.markdown(
+        '<div class="chat-topbar"><div><div class="chat-topbar-title">调试信息</div>'
+        '<div class="chat-topbar-sub">执行轨迹 · 源内容 · 性能</div></div></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="debug-panel-wrap">', unsafe_allow_html=True)
 
-    # 三个标签页：执行轨迹、源内容、性能监控
-    tabs = st.tabs(["执行轨迹", "源内容", "性能监控"])
+    tabs = st.tabs(["📋 执行轨迹", "📄 源内容", "⏱️ 性能监控"])
 
     with tabs[0]:
         _display_execution_trace()
@@ -202,3 +206,5 @@ def display_debug_panel():
 
     with tabs[2]:
         _display_performance()
+
+    st.markdown("</div>", unsafe_allow_html=True)

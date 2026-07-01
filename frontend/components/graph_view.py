@@ -5,7 +5,6 @@ import tempfile
 import base64
 
 import streamlit as st
-from pyvis.network import Network
 
 from frontend.components.layout import section_header
 
@@ -58,6 +57,7 @@ def _render_legend(group_colors: dict):
 
 def visualize_graph(kg_data: dict):
     """使用 pyvis 渲染知识图谱"""
+    from pyvis.network import Network
     if not kg_data or "nodes" not in kg_data or "links" not in kg_data:
         st.warning("无法获取图谱数据")
         return

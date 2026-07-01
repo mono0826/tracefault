@@ -14,35 +14,161 @@ if _project_root not in sys.path:
 
 import json
 import datetime
+import uuid
 import streamlit as st
 
-from backend.agents.qa_agent import naive_rag, local_search_agent, intent_rag
-from backend.config.settings import PROJECT_ROOT
+from frontend.common.constants import AGENT_OPTIONS
+from frontend.utils.helpers import generate_session_id
+from backend.config.settings import PROJECT_ROOT, CHAT_HISTORY_PATH
 from backend.config.neo4jdb import get_db_manager
+
+
+# ===== 历史会话 =====
+
+_HISTORY_LIST_LIMIT = 20
+
+
+def _session_json_path(session_id: str) -> Path:
+    return CHAT_HISTORY_PATH / f"{session_id}.json"
+
+
+def _read_session_json(session_id: str) -> dict | None:
+    """直接读取 CHAT_HISTORY_PATH 下的会话 JSON"""
+    path = _session_json_path(session_id)
+    if not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _format_session_time(iso_str: str) -> str:
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return dt.strftime("%m-%d %H:%M")
+    except ValueError:
+        return iso_str[:16]
+
+
+def _session_title(messages: list[dict]) -> str:
+    for msg in messages:
+        if msg.get("role") == "user":
+            text = (msg.get("content") or "").strip()
+            if text:
+                return text[:16] + ("…" if len(text) > 16 else "")
+    return "新对话"
+
+
+def _to_frontend_messages(raw_messages: list[dict]) -> list[dict]:
+    """JSON 消息 → 前端展示格式（含 system 摘要）"""
+    result = []
+    for msg in raw_messages:
+        role = msg.get("role", "")
+        content = msg.get("content") or ""
+        if role not in ("user", "assistant", "system"):
+            continue
+        item = {
+            "role": role,
+            "content": content,
+            "message_id": str(uuid.uuid4()),
+        }
+        if role == "system" or msg.get("is_summary"):
+            item["role"] = "system"
+            item["is_summary"] = True
+        result.append(item)
+    return result
+
+
+def list_chat_sessions(limit: int = _HISTORY_LIST_LIMIT) -> list[dict]:
+    """列出历史会话（含标题、时间）"""
+    from backend.session_manager import SessionManager
+
+    mgr = SessionManager()
+    sessions = mgr.list_sessions()[:limit]
+    enriched = []
+    for info in sessions:
+        sid = info["session_id"]
+        data = _read_session_json(sid)
+        messages = data.get("messages", []) if data else []
+        enriched.append({
+            **info,
+            "title": _session_title(messages),
+            "time_label": _format_session_time(info.get("updated_at", "")),
+        })
+    return enriched
+
+
+def load_chat_session(session_id: str) -> bool:
+    """加载历史会话到 session_state，并恢复 agent_type"""
+    data = _read_session_json(session_id)
+    if not data:
+        return False
+
+    agent_type = data.get("metadata", {}).get("agent_type", "general_agent")
+    if agent_type not in AGENT_OPTIONS:
+        agent_type = "general_agent"
+
+    st.session_state.session_id = session_id
+    st.session_state._pending_agent_type = agent_type
+    st.session_state.messages = _to_frontend_messages(data.get("messages", []))
+    st.session_state.execution_log = []
+    st.session_state.feedback_given = set()
+    st.session_state.processing_lock = False
+    st.session_state.source_content = None
+    return True
+
+
+def delete_chat_session(session_id: str) -> bool:
+    """删除历史会话 JSON"""
+    from backend.session_manager import SessionManager
+
+    return SessionManager().delete_session(session_id)
+
+
+def start_new_chat_session():
+    """开始新对话（新 session_id，清空界面状态）"""
+    st.session_state.session_id = generate_session_id()
+    st.session_state.messages = []
+    st.session_state.execution_log = []
+    st.session_state.feedback_given = set()
+    st.session_state.processing_lock = False
+    st.session_state.source_content = None
 
 
 # ===== 问答接口（薄分发层） =====
 
-_AGENT_MAP = {
-    "naive_rag_agent": naive_rag,
-    "local_search_agent": local_search_agent,
-    "intent_rag_agent": intent_rag,
-}
+def _get_agent_fn(agent_type: str):
+    """延迟导入并获取 Agent 调用函数"""
+    from backend.agents import chat, intent_rag
+    _MAP = {
+        "general_agent": chat,
+        "intent_rag_agent": intent_rag,
+    }
+    return _MAP.get(agent_type)
 
 
-def chat_qa(query: str, agent_type: str = "naive_rag_agent",
+def chat_qa(query: str, agent_type: str = "general_agent",
             session_id: str = None, show_thinking: bool = False,
             use_deeper_tool: bool = False) -> dict:
-    """非流式问答 — 透传给 backend.agents.qa_agent"""
-    fn = _AGENT_MAP.get(agent_type)
+    """非流式问答 — 透传给 backend Agent"""
+    if agent_type == "deep_research_agent":
+        from backend.search.tool.deep_research_tool import DeepResearchTool
+        try:
+            result = DeepResearchTool().research(query, show_thinking=show_thinking, use_deeper=use_deeper_tool)
+        except Exception as e:
+            return {"answer": f"处理出错: {e}", "sources": [], "execution_log": [f"[错误] {e}"], "raw_thinking": ""}
+        return {"answer": result.get("answer", ""), "sources": result.get("sources", []),
+                "execution_log": result.get("log", []), "raw_thinking": result.get("thinking", "")}
+
+    fn = _get_agent_fn(agent_type)
     if fn is None:
         return {"answer": f"未知 Agent: {agent_type}", "sources": [], "execution_log": [], "raw_thinking": ""}
     try:
-        if agent_type == "deep_research_agent":
-            result = fn(query, show_thinking=show_thinking, use_deeper=use_deeper_tool)
-        else:
-            result = fn(query)
-        # 统一字段名
+        result = fn(query, session_id=session_id)
         return {
             "answer": result["answer"],
             "sources": result.get("sources", []),
@@ -53,17 +179,22 @@ def chat_qa(query: str, agent_type: str = "naive_rag_agent",
         return {"answer": f"处理出错: {e}", "sources": [], "execution_log": [f"[错误] {e}"], "raw_thinking": ""}
 
 
-def chat_qa_stream(query: str, agent_type: str = "naive_rag_agent",
+def chat_qa_stream(query: str, agent_type: str = "general_agent",
                    session_id: str = None, show_thinking: bool = False,
-                   use_deeper_tool: bool = False) -> Generator[str, None, None]:
-    """流式问答"""
+                   use_deeper_tool: bool = False,
+                   history: list | None = None) -> Generator[str, None, None]:
+    """流式问答 — 按 Agent 注册表分发"""
+    if agent_type == "deep_research_agent":
+        yield "深度研究 Agent 暂不支持流式输出，请在侧栏关闭流式模式或切换其他 Agent。"
+        return
+    from backend.agents import AGENT_REGISTRY
+    entry = AGENT_REGISTRY.get(agent_type)
+    if not entry or "stream_fn" not in entry:
+        yield f"未知或不支持流式的 Agent: {agent_type}"
+        return
     try:
-        if agent_type == "naive_rag_agent":
-            from backend.agents.qa_agent import naive_rag_stream
-            yield from naive_rag_stream(query)
-        elif agent_type == "local_search_agent":
-            from backend.agents.qa_agent import local_search_agent_stream
-            yield from local_search_agent_stream(query)
+        stream_fn = entry["stream_fn"]
+        yield from stream_fn(query, session_id=session_id)
     except Exception as e:
         yield f"\n\n生成出错: {e}"
 
@@ -73,7 +204,7 @@ def send_feedback(
     query: str,
     is_positive: bool,
     thread_id: str,
-    agent_type: str = "naive_rag_agent",
+    agent_type: str = "general_agent",
 ) -> dict:
     """记录反馈到本地 JSONL"""
     try:
@@ -95,15 +226,14 @@ def send_feedback(
 
 
 def clear_chat(session_id: str = None):
-    """清空聊天状态"""
-    st.session_state.processing_lock = False
-    st.session_state.messages = []
-    st.session_state.execution_log = []
-    st.session_state.source_content = None
+    """开始新对话"""
+    start_new_chat_session()
 
 def search_sources(source_id: str, top_k: int = 1) -> list:
     """按 ID 查询 Chunk 原文（调试用）"""
     try:
+        if not check_has_graph():
+            return []
         db = get_db_manager()
         result = db.graph.query(
             "MATCH (c:__Chunk__ {id: $id}) RETURN c.text AS content LIMIT $limit",
@@ -118,6 +248,8 @@ def search_sources(source_id: str, top_k: int = 1) -> list:
 def get_graph_data(limit: int = 300) -> dict:
     """获取知识图谱节点和关系数据用于可视化"""
     try:
+        if not check_has_graph():
+            return {"nodes": [], "links": []}
         db = get_db_manager()
         # 获取实体节点
         nodes = db.graph.query(f"""
@@ -170,6 +302,7 @@ def get_graph_data(limit: int = 300) -> dict:
         return {"nodes": [], "links": [], "error": str(e)}
 
 
+
 # ===== 知识图谱构建接口 =====
 
 PIPELINE_STAGES = [
@@ -179,6 +312,7 @@ PIPELINE_STAGES = [
 ]
 
 
+@st.cache_resource(ttl=30)
 def check_neo4j() -> tuple:
     """检查 Neo4j 连接状态"""
     try:
@@ -189,9 +323,12 @@ def check_neo4j() -> tuple:
         return False, str(e)
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def get_graph_stats() -> dict:
     """获取知识图谱统计"""
     try:
+        if not check_has_graph():
+            return {"connected": True, "entities": 0, "total_relations": 0, "communities": 0, "chunks": 0}
         db = get_db_manager()
         result = db.graph.query("""
             MATCH (e:`__Entity__`) WITH count(e) AS entities
@@ -215,6 +352,8 @@ def get_graph_stats() -> dict:
 def get_library_stats() -> dict:
     """获取知识库文档/Chunk 统计"""
     try:
+        if not check_has_graph():
+            return {"documents": 0, "chunks": 0, "vector_dim": 0}
         db = get_db_manager()
         r = db.graph.query("""
             MATCH (d:__Document__) WITH count(d) AS documents
@@ -230,6 +369,8 @@ def list_docs() -> list:
     """列出已入库文档"""
     import os
     try:
+        if not check_has_graph():
+            return []
         db = get_db_manager()
         result = db.graph.query("MATCH (d:__Document__) RETURN d.fileName AS file_name")
         return [{"title": os.path.basename(r["file_name"]), "source_file": r["file_name"]} for r in result]
@@ -249,10 +390,12 @@ def _get_processor():
     return _processor
 
 
+@st.cache_data(ttl=30, show_spinner=False)
 def check_has_graph() -> bool:
-    """检查知识图谱是否已构建"""
+    """检查知识图谱是否已构建（轻量，不触发处理器初始化）"""
     try:
-        return _get_processor().has_graph()
+        r = get_db_manager().graph.query("MATCH (n) RETURN count(n) AS total")
+        return bool(r and r[0].get("total", 0) > 0)
     except Exception:
         return False
 

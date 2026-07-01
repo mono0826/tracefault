@@ -205,6 +205,75 @@ def custom_css():
         border-color: rgba(255,255,255,0.12) !important;
         color: #e2e8f0 !important;
     }
+    section[data-testid="stSidebar"] [data-testid="stRadio"] label p {
+        color: #e2e8f0 !important;
+        font-size: 13px !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stRadio"] [data-baseweb="radio"] {
+        background: transparent !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stRadio"] > div > label [data-testid="stMarkdownContainer"] p {
+        position: relative;
+        display: inline-block;
+    }
+    section[data-testid="stSidebar"] [data-testid="stRadio"] > div > label [data-testid="stMarkdownContainer"] p::after {
+        content: "?";
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 14px;
+        height: 14px;
+        margin-left: 6px;
+        border-radius: 50%;
+        border: 1px solid #64748b;
+        color: #94a3b8;
+        font-size: 10px;
+        line-height: 1;
+        cursor: help;
+        vertical-align: middle;
+    }
+    section[data-testid="stSidebar"] [data-testid="stRadio"] > div > label [data-testid="stMarkdownContainer"] p::before {
+        visibility: hidden;
+        opacity: 0;
+        position: absolute;
+        left: 0;
+        bottom: calc(100% + 6px);
+        min-width: 180px;
+        max-width: 220px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        background: #1e293b;
+        border: 1px solid rgba(255,255,255,0.12);
+        color: #cbd5e1;
+        font-size: 11px;
+        line-height: 1.5;
+        white-space: normal;
+        z-index: 100;
+        pointer-events: none;
+        transition: opacity 0.15s ease, visibility 0.15s ease;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+    }
+    section[data-testid="stSidebar"] [data-testid="stRadio"] > div > label [data-testid="stMarkdownContainer"] p:hover::before {
+        visibility: visible;
+        opacity: 1;
+    }
+    .ind-history-empty {
+        margin: 0 4px 8px;
+        font-size: 12px;
+        color: #64748b !important;
+    }
+
+    .chat-summary-hint {
+        margin: 8px 0 12px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: #f1f5f9;
+        border-left: 3px solid #94a3b8;
+        font-size: 12px;
+        line-height: 1.6;
+        color: #64748b;
+        white-space: pre-wrap;
+    }
 
     .ind-sidebar-meta {
         margin-top: 16px; padding-top: 12px;
@@ -235,6 +304,30 @@ def custom_css():
     }
 
     .chat-thread-marker { display: none; }
+
+    /* 问答页：对话区留白，输入框贴底全宽 */
+    [data-testid="stMainBlockContainer"]:has(.chat-thread-marker) {
+        padding-bottom: 6rem !important;
+    }
+    [data-testid="stMainBlockContainer"]:has(.chat-thread-marker) div[data-testid="stBottomBlockContainer"],
+    [data-testid="stMainBlockContainer"]:has(.chat-thread-marker) div[data-testid="stBottomBlockContainer"] > div {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    [data-testid="stMainBlockContainer"]:has(.chat-thread-marker) div[data-testid="stChatInput"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        background: linear-gradient(to top, var(--ind-bg) 80%, transparent) !important;
+        padding: 0 0 12px !important;
+    }
+    [data-testid="stMainBlockContainer"]:has(.chat-thread-marker) div[data-testid="stChatInput"] > div {
+        width: min(var(--chat-max), calc(100% - 24px)) !important;
+        max-width: min(var(--chat-max), calc(100% - 24px)) !important;
+        margin: 0 auto !important;
+    }
+    [data-testid="stMainBlockContainer"]:has(.chat-thread-marker) div[data-testid="stChatInput"] textarea {
+        min-height: 44px !important;
+    }
 
     .welcome-industrial {
         text-align: center;
@@ -292,6 +385,28 @@ def custom_css():
         padding: 14px 18px;
         border-radius: 4px 16px 16px 16px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+    .llm-thinking {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 2px 0;
+        color: #64748b;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .llm-thinking-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(100, 116, 139, 0.22);
+        border-top-color: var(--ind-accent, #2563eb);
+        border-radius: 50%;
+        animation: llm-thinking-spin 0.75s linear infinite;
+        flex-shrink: 0;
+        box-sizing: border-box;
+    }
+    @keyframes llm-thinking-spin {
+        to { transform: rotate(360deg); }
     }
     div[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
         font-size: 14px; line-height: 1.75; color: var(--ind-text);

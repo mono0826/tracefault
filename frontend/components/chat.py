@@ -2,10 +2,11 @@
 
 import uuid
 import re
+import html
 import traceback
 import streamlit as st
 
-from frontend.common.constants import QUICK_FAULT_TAGS
+from frontend.common.constants import QUICK_QUESTION
 from frontend.utils.helpers import build_enriched_query, extract_source_ids, sanitize_answer_text
 from frontend.utils.api_client import (
     chat_qa,
@@ -15,6 +16,31 @@ from frontend.utils.api_client import (
 )
 
 
+
+
+def _thinking_indicator_html(text: str = "思考中…") -> str:
+    return (
+        f'<div class="llm-thinking">'
+        f'<span class="llm-thinking-spinner"></span>'
+        f'<span class="llm-thinking-text">{html.escape(text)}</span>'
+        f"</div>"
+    )
+
+
+def _stream_with_thinking_indicator(generator, label: str = "思考中…"):
+    """首个 token 到达前显示转圈，开始输出后自动隐藏"""
+    thinking = st.empty()
+    thinking.markdown(_thinking_indicator_html(label), unsafe_allow_html=True)
+    started = False
+    try:
+        for chunk in generator:
+            if not started:
+                thinking.empty()
+                started = True
+            yield chunk
+    finally:
+        if not started:
+            thinking.empty()
 
 
 def _display_thinking_process(raw_thinking: str):
@@ -29,6 +55,15 @@ def _get_enriched_query(display_prompt: str) -> str:
         equipment_id=st.session_state.get("equipment_id", ""),
         fault_severity=st.session_state.get("fault_severity", ""),
     )
+
+
+def _chat_history_for_api() -> list | None:
+    """当前轮之前的对话历史，供意图识别使用"""
+    msgs = st.session_state.get("messages", [])
+    if len(msgs) <= 1:
+        return None
+    prior = msgs[:-1]
+    return [{"role": m["role"], "content": m["content"]} for m in prior if m["role"] in ("user", "assistant")]
 
 
 def _render_welcome():
@@ -48,8 +83,8 @@ def _render_welcome():
 
 
 def _render_dock_pills():
-    cols = st.columns(len(QUICK_FAULT_TAGS))
-    for i, tag in enumerate(QUICK_FAULT_TAGS):
+    cols = st.columns(len(QUICK_QUESTION))
+    for i, tag in enumerate(QUICK_QUESTION):
         with cols[i]:
             st.markdown('<div class="dock-pill">', unsafe_allow_html=True)
             if st.button(tag, key=f"quick_tag_{i}", width="stretch"):
@@ -137,9 +172,11 @@ def _render_assistant_message(msg: dict, i: int):
     _render_feedback_buttons(msg, i)
 
 
-def _handle_non_stream_response(display_prompt: str, api_prompt: str):
+def _handle_non_stream_response(api_prompt: str):
     with st.chat_message("assistant", avatar="🤖"):
-        with st.spinner("分析中…"):
+        thinking = st.empty()
+        thinking.markdown(_thinking_indicator_html("分析中…"), unsafe_allow_html=True)
+        try:
             result = chat_qa(
                 api_prompt,
                 agent_type=st.session_state.agent_type,
@@ -147,6 +184,8 @@ def _handle_non_stream_response(display_prompt: str, api_prompt: str):
                 show_thinking=st.session_state.get("show_thinking", False),
                 use_deeper_tool=st.session_state.get("use_deeper_tool", True),
             )
+        finally:
+            thinking.empty()
         answer = result.get("answer", "抱歉，无法生成回答。")
         display = sanitize_answer_text(answer)
         st.markdown(display)
@@ -160,41 +199,39 @@ def _handle_non_stream_response(display_prompt: str, api_prompt: str):
 
 def _handle_stream_response(display_prompt: str, api_prompt: str):
     with st.chat_message("assistant", avatar="🤖"):
-        with st.spinner("检索知识库…"):
-            st.session_state.execution_log = [
-                f"[检索] Agent: {st.session_state.agent_type}",
-                f"[检索] 查询: {display_prompt}",
-            ]
+        st.session_state.execution_log = [
+            f"[检索] Agent: {st.session_state.agent_type}",
+            f"[检索] 查询: {display_prompt}",
+        ]
         try:
             generator = chat_qa_stream(
                 api_prompt,
                 agent_type=st.session_state.agent_type,
                 session_id=st.session_state.session_id,
+                history=_chat_history_for_api(),
             )
-            full_response = st.write_stream(generator)
+            full_response = st.write_stream(
+                _stream_with_thinking_indicator(generator, "思考中…")
+            )
         except Exception as e:
             full_response = f"生成回答时出错: {e}"
             st.error(full_response)
+        if not full_response:
+            full_response = "抱歉，未能生成回答。"
         st.session_state.messages.append({
-            "role": "assistant", "content": full_response, "message_id": str(uuid.uuid4()),
+            "role": "assistant",
+            "content": full_response,
+            "message_id": str(uuid.uuid4()),
         })
 
 
-def _process_user_message(display_prompt: str):
-    if st.session_state.get("processing_lock", False):
-        st.warning("请等待当前操作完成…")
-        return
-    st.session_state.processing_lock = True
-    api_prompt = _get_enriched_query(display_prompt)
-    with st.chat_message("user", avatar="👤"):
-        st.markdown(display_prompt)
-    st.session_state.messages.append({"role": "user", "content": display_prompt})
+def _generate_assistant_response(display_prompt: str, api_prompt: str):
     try:
         use_stream = st.session_state.get("use_stream", True) and not st.session_state.debug_mode
         if use_stream:
             _handle_stream_response(display_prompt, api_prompt)
         else:
-            _handle_non_stream_response(display_prompt, api_prompt)
+            _handle_non_stream_response(api_prompt)
     except Exception as e:
         st.error(f"处理消息时出错: {str(e)}")
         traceback.print_exc()
@@ -203,17 +240,34 @@ def _process_user_message(display_prompt: str):
     st.rerun()
 
 
+def _queue_user_message(display_prompt: str):
+    if st.session_state.get("processing_lock", False):
+        st.warning("请等待当前操作完成…")
+        return
+    st.session_state.processing_lock = True
+    st.session_state.messages.append({"role": "user", "content": display_prompt})
+    st.session_state._gen_assistant = {
+        "display": display_prompt,
+        "api": _get_enriched_query(display_prompt),
+    }
+    st.rerun()
+
+
 def display_chat_interface(show_summary_panel: bool = True):
+    st.markdown('<div class="chat-thread-marker"></div>', unsafe_allow_html=True)
     _, main_col, _ = st.columns([1, 7, 1])
 
     with main_col:
-        if st.session_state.get("processing_lock", False):
-            st.warning("请等待当前操作完成…")
-
         if not st.session_state.messages:
             _render_welcome()
         else:
             for i, msg in enumerate(st.session_state.messages):
+                if msg["role"] == "system" or msg.get("is_summary"):
+                    st.markdown(
+                        f'<div class="chat-summary-hint">{html.escape(msg["content"])}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    continue
                 avatar = "👤" if msg["role"] == "user" else "🤖"
                 with st.chat_message(msg["role"], avatar=avatar):
                     if msg["role"] == "assistant":
@@ -221,14 +275,16 @@ def display_chat_interface(show_summary_panel: bool = True):
                     else:
                         st.markdown(msg["content"])
 
-    if not st.session_state.messages:
-        _, pill_col, _ = st.columns([1, 7, 1])
-        with pill_col:
+        if not st.session_state.messages:
             _render_dock_pills()
+
+        gen = st.session_state.pop("_gen_assistant", None)
+        if gen:
+            _generate_assistant_response(gen["display"], gen["api"])
 
     pending = st.session_state.pop("pending_prompt", None)
     chat_prompt = st.chat_input("输入故障现象、报警代码或排查问题…")
 
     prompt = pending or chat_prompt
     if prompt:
-        _process_user_message(prompt)
+        _queue_user_message(prompt)

@@ -17,7 +17,7 @@ def init_session_state():
     if "source_content" not in st.session_state:
         st.session_state.source_content = None
     if "agent_type" not in st.session_state:
-        st.session_state.agent_type = "naive_rag_agent"
+        st.session_state.agent_type = "general_agent"
     if "show_thinking" not in st.session_state:
         st.session_state.show_thinking = False
     if "use_deeper_tool" not in st.session_state:

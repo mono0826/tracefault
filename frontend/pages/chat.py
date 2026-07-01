@@ -16,6 +16,7 @@ from frontend.components.debug import display_debug_panel
 
 
 init_session_state()
+st.session_state["_active_nav_key"] = "nav_chat"
 display_sidebar()
 
 if st.session_state.debug_mode:

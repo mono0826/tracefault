@@ -3,6 +3,8 @@
 import streamlit as st
 import pandas as pd
 
+st.session_state["_active_nav_key"] = "nav_admin"
+
 from frontend.components.doc_management import render_document_management
 from frontend.components.layout import subpage_header, metrics_row, section_header, empty_state, info_banner
 

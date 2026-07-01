@@ -139,21 +139,56 @@ def _render_history_list():
         st.markdown(f"<style>{''.join(row_css)}</style>", unsafe_allow_html=True)
 
 
+def render_sidebar_brand():
+    """品牌栏 — 侧边栏最顶部"""
+    st.markdown(
+        """
+        <div class="ind-brand">
+            <div class="ind-brand-icon">⚙</div>
+            <div class="ind-brand-text">
+                <div class="ind-brand-name">故障诊断系统</div>
+                <div class="ind-brand-tag">Equipment Fault QA</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+NAV_ITEMS = (
+    ("nav_chat", "ind-nav-chat", "pages/chat.py", "故障诊断", "🔧"),
+    ("nav_knowledge", "ind-nav-knowledge", "pages/knowledge.py", "知识库", "📚"),
+    ("nav_admin", "ind-nav-admin", "pages/admin.py", "管理后台", "🔐"),
+)
+
+
+def resolve_active_nav_key() -> str:
+    """当前页面对应的导航 key（URL 优先，其次 session_state）"""
+    try:
+        url = (st.context.url or "").lower()
+        for key, tokens in (
+            ("nav_knowledge", ("knowledge", "知识")),
+            ("nav_admin", ("admin", "管理")),
+            ("nav_chat", ("chat", "故障", "诊断")),
+        ):
+            if any(t.lower() in url for t in tokens):
+                return key
+    except Exception:
+        pass
+    return st.session_state.get("_active_nav_key", "nav_chat")
+
+
+def render_sidebar_nav():
+    """页面导航 — 位于品牌栏下方（替代 Streamlit 默认导航位置）"""
+    st.markdown('<div class="ind-nav-panel-start"></div>', unsafe_allow_html=True)
+    with st.container(border=False):
+        for _, css_class, page, label, icon in NAV_ITEMS:
+            st.markdown(f'<span class="ind-nav-marker {css_class}"></span>', unsafe_allow_html=True)
+            st.page_link(page, label=label, icon=icon)
+
+
 def display_sidebar():
     with st.sidebar:
-        st.markdown(
-            """
-            <div class="ind-brand">
-                <div class="ind-brand-icon">⚙</div>
-                <div class="ind-brand-text">
-                    <div class="ind-brand-name">故障诊断系统</div>
-                    <div class="ind-brand-tag">Equipment Fault QA</div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
         st.markdown('<div class="ind-history-active">', unsafe_allow_html=True)
         if st.button("💬  新对话", width="stretch", key="sidebar_new_chat"):
             clear_chat()

@@ -3,8 +3,39 @@
 import streamlit as st
 
 
-def custom_css():
+def custom_css(active_nav_key: str = "nav_chat"):
     """注入全局样式。Streamlit 1.57+ 须覆盖 stMainBlockContainer 的 6rem 顶栏留白。"""
+    active_class = {
+        "nav_chat": "ind-nav-chat",
+        "nav_knowledge": "ind-nav-knowledge",
+        "nav_admin": "ind-nav-admin",
+    }.get(active_nav_key, "ind-nav-chat")
+    nav_active_css = f"""
+    section[data-testid="stSidebar"] .ind-nav-panel-start ~ div [data-testid="stVerticalBlock"] {{
+        background: rgba(255,255,255,0.03) !important;
+        border-radius: var(--ind-radius) !important;
+        padding: 6px !important;
+        margin-bottom: 12px !important;
+    }}
+    section[data-testid="stSidebar"] .{active_class} ~ div [data-testid="stPageLink"] a,
+    section[data-testid="stSidebar"] .{active_class} ~ div [data-testid="stPageLink-NavLink"] {{
+        background: var(--ind-accent) !important;
+        background-color: var(--ind-accent) !important;
+        color: #fff !important;
+    }}
+    section[data-testid="stSidebar"] .{active_class} ~ div [data-testid="stPageLink"] a p,
+    section[data-testid="stSidebar"] .{active_class} ~ div [data-testid="stPageLink"] a span,
+    section[data-testid="stSidebar"] .{active_class} ~ div [data-testid="stPageLink"] [data-testid="stMarkdownContainer"] p {{
+        color: #fff !important;
+        font-weight: 600 !important;
+    }}
+    section[data-testid="stSidebar"] .{active_class} ~ div [data-testid="stPageLink"] a:hover,
+    section[data-testid="stSidebar"] .{active_class} ~ div [data-testid="stPageLink-NavLink"]:hover {{
+        background: var(--ind-accent-hover) !important;
+        background-color: var(--ind-accent-hover) !important;
+        color: #fff !important;
+    }}
+    """
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -108,6 +139,82 @@ def custom_css():
     section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] p,
     section[data-testid="stSidebar"] span, section[data-testid="stSidebar"] small {
         color: #94a3b8 !important;
+    }
+
+    /* 隐藏 Streamlit 默认导航（顺序不可控），改用自定义 page_link */
+    section[data-testid="stSidebar"] div[data-testid="stSidebarNav"] {
+        display: none !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] {
+        margin-bottom: 2px;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"]:last-child {
+        margin-bottom: 0;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a,
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a[data-testid="stPageLink-NavLink"] {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 8px !important;
+        color: #94a3b8 !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
+        line-height: 1.4 !important;
+        padding: 8px 10px !important;
+        text-decoration: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        min-height: unset !important;
+        height: auto !important;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a p,
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a span,
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] [data-testid="stMarkdownContainer"],
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] [data-testid="stMarkdownContainer"] p {
+        font-size: 13px !important;
+        line-height: 1.4 !important;
+        margin: 0 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a [data-testid="stIconEmoji"],
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a [data-testid="stIconMaterial"],
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a > span:has([data-testid="stIconEmoji"]),
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a > span:has([data-testid="stIconMaterial"]) {
+        font-size: 20px !important;
+        width: 20px !important;
+        height: 20px !important;
+        min-width: 20px !important;
+        flex-shrink: 0 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a:hover,
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a[data-testid="stPageLink-NavLink"]:hover {
+        background: var(--ind-sidebar-hover) !important;
+        background-color: var(--ind-sidebar-hover) !important;
+        color: #f1f5f9 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a:hover p,
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a:hover span {
+        color: #f1f5f9 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a[aria-current="page"],
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a[aria-current="true"],
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a[data-testid="stPageLink-NavLink"][aria-current="page"] {
+        background: var(--ind-accent) !important;
+        background-color: var(--ind-accent) !important;
+        color: #fff !important;
+        font-weight: 600 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a[aria-current="page"] p,
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a[aria-current="page"] span,
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a[aria-current="true"] p,
+    section[data-testid="stSidebar"] [data-testid="stPageLink"] a[aria-current="true"] span {
+        color: #fff !important;
+        font-weight: 600 !important;
+    }
+    section[data-testid="stSidebar"] .ind-nav-marker {
+        display: none;
     }
 
     div[data-testid="stSidebarNav"] {
@@ -755,5 +862,6 @@ def custom_css():
         color: var(--ind-text-muted);
         text-align: right;
     }
+    """ + nav_active_css + """
     </style>
     """, unsafe_allow_html=True)

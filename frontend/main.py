@@ -21,6 +21,7 @@ import streamlit as st
 
 from frontend.utils.performance import init_performance_monitoring
 from frontend.components.styles import custom_css
+from frontend.components.sidebar import render_sidebar_brand, render_sidebar_nav, resolve_active_nav_key
 from frontend.common.session import init_session_state
 
 st.set_page_config(
@@ -40,6 +41,11 @@ pg = st.navigation([
 # 全局初始化
 init_session_state()
 init_performance_monitoring()
-custom_css()
+
+with st.sidebar:
+    render_sidebar_brand()
+    render_sidebar_nav()
+
+custom_css(active_nav_key=resolve_active_nav_key())
 
 pg.run()

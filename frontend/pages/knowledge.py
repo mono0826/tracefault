@@ -9,6 +9,8 @@ _project_root = str(Path(__file__).resolve().parent.parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+st.session_state["_active_nav_key"] = "nav_knowledge"
+
 from frontend.utils.api_client import (
     check_neo4j, check_has_graph, get_graph_stats, get_graph_data, update_graph,
 )

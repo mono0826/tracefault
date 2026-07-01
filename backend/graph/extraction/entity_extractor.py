@@ -40,12 +40,6 @@ class EntityRelationExtractor:
         self.llm = llm
         self.entity_types = entity_types
         self.relationship_types = relationship_types
-        self.chat_history = []
-        
-        # 设置分隔符
-        self.tuple_delimiter = " : "
-        self.record_delimiter = "\n"
-        self.completion_delimiter = "\n\n"
         
         # 创建提示模板
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
@@ -53,7 +47,6 @@ class EntityRelationExtractor:
         
         self.chat_prompt = ChatPromptTemplate.from_messages([
             system_message_prompt,
-            MessagesPlaceholder("chat_history"),
             human_message_prompt
         ])
         
@@ -140,7 +133,7 @@ class EntityRelationExtractor:
         Args:
             file_contents: [(file_name, [Chunk, ...]), ...]
             progress_callback: 进度回调，每处理一个 chunk 调用一次 callback(index)
-            
+
         Returns:
             [(file_name, [Chunk, ...], [LLM结果, ...]), ...]
         """
@@ -247,12 +240,8 @@ class EntityRelationExtractor:
 
                 try:
                     batch_response = self.chain.invoke({
-                        "chat_history": self.chat_history,
                         "entity_types": self.entity_types,
                         "relationship_types": self.relationship_types,
-                        "tuple_delimiter": self.tuple_delimiter,
-                        "record_delimiter": self.record_delimiter,
-                        "completion_delimiter": self.completion_delimiter,
                         "input_text": batch_text,
                     })
 
@@ -304,7 +293,7 @@ class EntityRelationExtractor:
         parts = batch_content.split(f"\n{'-'*50}\n")
         return [part.strip() for part in parts]
     
-    @retry(times=3, exceptions=(Exception,), delay=1.0)
+    # @retry(times=3, exceptions=(Exception,), delay=1.0)
     def _process_single_chunk(self, chunk: Chunk) -> str:
         """
         处理单个 Chunk（调用 LLM 并缓存结果）
@@ -317,12 +306,8 @@ class EntityRelationExtractor:
         """
         _t0 = time.time()
         response = self.chain.invoke({
-            "chat_history": self.chat_history,
             "entity_types": self.entity_types,
             "relationship_types": self.relationship_types,
-            "tuple_delimiter": self.tuple_delimiter,
-            "record_delimiter": self.record_delimiter,
-            "completion_delimiter": self.completion_delimiter,
             "input_text": chunk.content,
         })
         _dt = time.time() - _t0

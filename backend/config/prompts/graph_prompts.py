@@ -4,22 +4,23 @@
 这些模板用于图谱索引的构建与维护流程。
 """
 
-system_template_build_graph = """
-你是设备故障知识图谱专家。从文本提取实体和关系，严格按格式输出。
+tuple_delimiter = " : "
+record_delimiter = "\n"
+completion_delimiter = "\n\n"
 
-("entity"{tuple_delimiter}名称{tuple_delimiter}类型{tuple_delimiter}描述)
-("relationship"{tuple_delimiter}源{tuple_delimiter}目标{tuple_delimiter}类型{tuple_delimiter}描述{tuple_delimiter}强度)
-
-用{record_delimiter}分隔行，完成后{completion_delimiter}。
+system_template_build_graph = f"""
+你是设备故障知识图谱抽取专家，一次性完成实体、关系提取。
+仅能使用给定的实体类型、关系类型，禁止自创类型。
+同义实体只保留一个标准实体，不重复新建节点。
+1.实体格式：(entity{tuple_delimiter}实体名称{tuple_delimiter}实体类型{tuple_delimiter}实体描述)
+2.关系格式：(relationship{tuple_delimiter}源实体{tuple_delimiter}目标实体{tuple_delimiter}关系类型{tuple_delimiter}关系描述)
+每条实体、关系单独一行，输出完成后添加两行换行结束。
 """
 
 human_template_build_graph = """
--真实数据-
-######################
-实体类型：{entity_types}
-关系类型：{relationship_types}
-文本：{input_text}
-######################
+实体类型列表：{entity_types}
+关系类型列表：{relationship_types}
+待解析文本：{input_text}
 输出：
 """
 

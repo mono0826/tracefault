@@ -8,6 +8,8 @@ _project_root = str(Path(__file__).resolve().parent.parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+# 离线模式：模型已缓存时跳过联网检查（国内 huggingface 连不上也不影响）
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
 # 屏蔽 transformers / huggingface 的杂音警告
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
@@ -22,7 +24,11 @@ class _SentenceTransformerAdapter:
     """包装 SentenceTransformer，提供 embed_query / embed_documents 接口"""
 
     def __init__(self, model_name: str, device: str = "cpu"):
-        self._model = SentenceTransformer(model_name, device=device)
+        # 优先离线加载（本地已缓存时跳过联网检查），失败则回退在线加载
+        try:
+            self._model = SentenceTransformer(model_name, device=device, local_files_only=True)
+        except Exception:
+            self._model = SentenceTransformer(model_name, device=device)
         self._model.encode("warmup", show_progress_bar=False)
 
     def embed_query(self, text: str) -> List[float]:

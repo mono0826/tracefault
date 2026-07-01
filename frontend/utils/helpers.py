@@ -2,8 +2,28 @@
 
 import uuid
 import re
+from pathlib import Path
 from typing import List
 import streamlit as st
+
+_SUPPORTED_DOC_SUFFIXES = {
+    ".txt", ".pdf", ".md", ".docx", ".doc", ".csv", ".json", ".yaml", ".yml",
+}
+
+
+def count_folder_files(folder: str | Path, *, recursive: bool = True) -> int:
+    """统计文件夹内可构建的文档文件数（递归子目录）"""
+    path = Path(folder)
+    if not path.is_dir():
+        return 0
+    if recursive:
+        files = path.rglob("*")
+    else:
+        files = path.iterdir()
+    return sum(
+        1 for p in files
+        if p.is_file() and p.suffix.lower() in _SUPPORTED_DOC_SUFFIXES
+    )
 
 
 def generate_session_id() -> str:

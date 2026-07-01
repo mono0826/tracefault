@@ -20,6 +20,7 @@ from frontend.components.layout import (
 )
 from frontend.components.pipeline_view import init_pipeline_state, _format_terminal_html
 from frontend.utils.native_dialog import pick_folder, pick_files
+from frontend.utils.helpers import count_folder_files
 from frontend.common.base import run_pipeline_ui
 
 
@@ -86,8 +87,9 @@ with tab_graph:
                     input_path = Path(st.session_state.kg_selected_folder)
                     if input_path.is_dir():
                         dir_path = str(input_path)
+                        file_count = count_folder_files(input_path)
                         st.markdown(
-                            f'<p class="build-panel-hint">{input_path.name}</p>',
+                            f'<p class="build-panel-hint">{input_path.name} · 共 {file_count} 个文件</p>',
                             unsafe_allow_html=True,
                         )
             else:

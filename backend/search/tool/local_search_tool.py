@@ -15,7 +15,7 @@ from backend.config.prompts import (
     LOCAL_SEARCH_CONTEXT_PROMPT,
     LOCAL_SEARCH_KEYWORD_PROMPT,
 )
-from backend.config.settings import lc_description
+from backend.config.settings import lc_description, PROJECT_ROOT
 from backend.search.tool.base import BaseSearchTool
 from backend.search.local_search import LocalSearch
 from backend.search.retrieval_adapter import results_from_documents, results_to_payload
@@ -27,7 +27,7 @@ class LocalSearchTool(BaseSearchTool):
     def __init__(self):
         """初始化本地搜索工具"""
         # 调用父类构造函数
-        super().__init__(cache_dir="./.cache/local_search")
+        super().__init__(cache_dir=str(PROJECT_ROOT / ".cache/local_search"))
         
         # 设置聊天历史，用于连续对话
         self.chat_history = []

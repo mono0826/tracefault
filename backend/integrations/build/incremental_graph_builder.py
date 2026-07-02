@@ -10,7 +10,7 @@ from rich.table import Table
 from backend.models.get_models import get_llm_model
 from backend.config.prompts import system_template_build_graph, human_template_build_graph
 from backend.config.settings import (
-    entity_types, relationship_types, CHUNK_SIZE, OVERLAP, MAX_WORKERS, BATCH_SIZE,
+    CHUNK_SIZE, OVERLAP, MAX_WORKERS, BATCH_SIZE,
     FILE_REGISTRY_PATH, PROJECT_ROOT
 )
 from backend.pipelines.document_processor import DocumentProcessor
@@ -67,8 +67,6 @@ class IncrementalGraphUpdater:
             self.llm,
             system_template_build_graph,
             human_template_build_graph,
-            entity_types,
-            relationship_types,
             max_workers=MAX_WORKERS
         )
         

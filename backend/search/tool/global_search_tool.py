@@ -13,7 +13,7 @@ from backend.config.prompts import (
     GLOBAL_SEARCH_REDUCE_PROMPT,
     GLOBAL_SEARCH_KEYWORD_PROMPT,
 )
-from backend.config.settings import gl_description, GLOBAL_SEARCH_SETTINGS
+from backend.config.settings import gl_description, GLOBAL_SEARCH_SETTINGS, PROJECT_ROOT
 from backend.search.tool.base import BaseSearchTool
 from backend.search.retrieval_adapter import (
     create_retrieval_metadata,
@@ -38,7 +38,7 @@ class GlobalSearchTool(BaseSearchTool):
         )
         
         # 调用父类构造函数
-        super().__init__(cache_dir="./.cache/global_search")
+        super().__init__(cache_dir=str(PROJECT_ROOT / ".cache/global_search"))
 
         # 设置处理链
         self._setup_chains()

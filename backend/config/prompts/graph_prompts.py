@@ -8,19 +8,59 @@ tuple_delimiter = " : "
 record_delimiter = "\n"
 completion_delimiter = "\n\n"
 
+entity_types = [
+    "设备",
+    "部件",
+    "故障",
+    "故障原因",
+    "故障现象",
+    "维修措施",
+    "参数",
+]
+
+relationship_types = [
+    "发生",
+    "包含",
+    "导致",
+    "表现为",
+    "维修解决",
+    "关联于",
+]
+
 system_template_build_graph = f"""
 你是设备故障知识图谱抽取专家，一次性完成实体、关系提取。
 仅能使用给定的实体类型、关系类型，禁止自创类型。
 同义实体只保留一个标准实体，不重复新建节点。
-1.实体格式：(entity{tuple_delimiter}实体名称{tuple_delimiter}实体类型{tuple_delimiter}实体描述)
-2.关系格式：(relationship{tuple_delimiter}源实体{tuple_delimiter}目标实体{tuple_delimiter}关系类型{tuple_delimiter}关系描述)
-每条实体、关系单独一行，输出完成后添加两行换行结束。
+
+命名一致性要求：
+- 同一实体在不同句子中出现时，必须使用完全相同的名称，不得使用同义词、简称或不同表述。
+- 例如："数控加工中心主轴"和"加工中心主轴"应统一为同一个标准名称。
+- 避免使用代词（它、该设备、此部件等），始终显式写出实体全称。
+
+实体提取原则：
+- 只提取在文本中明确出现、语义清晰的实体，禁止自行推断或创造实体。
+- 如果某个实体在文本中表述模糊、指代不明或缺乏确定性描述，则不应提取。
+- 不确定的实体宁可不提取，也不要随意命名或归类。
+- 实体名称必须是**名词性短语**，不能包含动作动词（如"维修""更换""清洗"等）。
+- 动作应通过关系类型来表达，不要将动作嵌入实体名称中。
+- 例如："主轴冷却系统维修"是错误的实体名，应表示为实体"主轴冷却系统" + 关系"维修解决"。
+
+置信度要求：
+- 为每个提取的实体和关系输出一个置信度分数，范围 0.0~1.0。
+- 分数含义：1.0=完全确定，0.8=高置信度，0.6=中等置信度，0.0~0.4=低置信度。
+- 文本中明确出现、描述清晰的实体给 0.8~1.0。
+- 文本中虽未直接出现但能从上下文明确推断出的实体给 0.6~0.8。
+- 不确定是否应该提取的实体给 0.0~0.4，这类宁可不提取。
+
+输出格式：
+1.实体格式：(entity{tuple_delimiter}实体名称{tuple_delimiter}实体类型{tuple_delimiter}实体描述{tuple_delimiter}置信度)
+2.关系格式：(relationship{tuple_delimiter}源实体{tuple_delimiter}目标实体{tuple_delimiter}关系类型{tuple_delimiter}关系描述{tuple_delimiter}置信度)
 """
 
-human_template_build_graph = """
+human_template_build_graph = f"""
 实体类型列表：{entity_types}
 关系类型列表：{relationship_types}
-待解析文本：{input_text}
+待解析文本：{{input_text}}
 输出：
 """
 
@@ -86,6 +126,11 @@ Given these entities that should refer to the same concept:
 Which entity ID best represents the canonical form? Reply with only the entity ID."""
 
 __all__ = [
+    "tuple_delimiter",
+    "record_delimiter",
+    "completion_delimiter",
+    "entity_types",
+    "relationship_types",
     "system_template_build_graph",
     "human_template_build_graph",
     "system_template_build_index",

@@ -60,6 +60,14 @@ FILES_DIR = DATA_DIR / "test" # 数据文件夹路径
 UPLOAD_FILES_DIR = DATA_DIR / "upload" # 上传文件夹路径
 FILE_REGISTRY_PATH = PROJECT_ROOT / "file_registry.json"  # 文件注册表路径
 VECTOR_STORE_PATH = PROJECT_ROOT / "data/vector_store/"  # 向量存储路径
+CHAT_HISTORY_PATH = PROJECT_ROOT / ".cache/session/"  # 聊天历史记录路径
+
+# ===== 上下文窗口管理 =====
+
+TEXT_WINDOW = 200_000  # 模型上下文窗口大小（默认 200K tokens）
+CONTEXT_RESERVE = 20_000  # 为 API 响应预留的 token 数
+CONTEXT_AUTO_COMPACT_THRESHOLD = 0.75  # 上下文利用率达到该比例时自动触发压缩
+CONTEXT_WARN_THRESHOLD = 0.60  # 上下文利用率达到该比例时发出警告
 
 # ===== 知识库与系统参数 =====
 
@@ -70,24 +78,6 @@ workers = _get_env_int("FASTAPI_WORKERS", 2) or 2  # FastAPI 并发进程数
 
 theme = "设备故障"  # 知识图谱主题
 
-entity_types = [
-    "设备",
-    "部件",
-    "故障",
-    "故障原因",
-    "故障现象",
-    "维修措施",
-    "参数",
-]  # 知识图谱实体类型
-
-relationship_types = [
-    "发生",
-    "包含",
-    "导致",
-    "表现为",
-    "维修解决",
-    "关联于",
-]  # 知识图谱关系类型
 
 # 冲突解决策略：manual_first / auto_first / merge
 conflict_strategy = os.getenv("GRAPH_CONFLICT_STRATEGY", "manual_first")
@@ -98,7 +88,7 @@ community_algorithm = os.getenv("GRAPH_COMMUNITY_ALGORITHM", "leiden")
 # ===== 文本处理配置 =====
 
 CHUNK_SIZE = _get_env_int("CHUNK_SIZE", 500) or 500  # 文本分块大小
-OVERLAP = _get_env_int("CHUNK_OVERLAP", 50) or 50  # 分块重叠长度
+OVERLAP = _get_env_int("CHUNK_OVERLAP", 100) or 100  # 分块重叠长度
 MAX_TEXT_LENGTH = _get_env_int("MAX_TEXT_LENGTH", 500000) or 500000  # 最大文本长度
 similarity_threshold = _get_env_float("SIMILARITY_THRESHOLD", 0.9) or 0.9  # 向量相似度阈值
 

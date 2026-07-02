@@ -13,7 +13,7 @@ from backend.config.prompts import (
     HYBRID_TOOL_QUERY_PROMPT,
     LOCAL_SEARCH_KEYWORD_PROMPT,
 )
-from backend.config.settings import gl_description, response_type, HYBRID_SEARCH_SETTINGS
+from backend.config.settings import gl_description, response_type, HYBRID_SEARCH_SETTINGS, PROJECT_ROOT
 from backend.search.tool.base import BaseSearchTool
 from backend.agents.multi_agent.core.retrieval_result import RetrievalResult
 from backend.search.retrieval_adapter import (
@@ -42,7 +42,7 @@ class HybridSearchTool(BaseSearchTool):
         self.community_level = HYBRID_SEARCH_SETTINGS["community_level"]
         
         # 调用父类构造函数
-        super().__init__(cache_dir="./.cache/hybrid_search")
+        super().__init__(cache_dir=str(PROJECT_ROOT / ".cache/hybrid_search"))
 
         # 设置处理链
         self._setup_chains()

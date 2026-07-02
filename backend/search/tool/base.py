@@ -8,13 +8,13 @@ from backend.models.get_models import get_llm_model, get_embeddings_model
 from backend.cache_manager.manager import CacheManager, ContextAndKeywordAwareCacheKeyStrategy, MemoryCacheBackend
 from backend.config.neo4jdb import get_db_manager
 from backend.search.utils import VectorUtils
-from backend.config.settings import BASE_SEARCH_CONFIG
+from backend.config.settings import BASE_SEARCH_CONFIG, PROJECT_ROOT
 
 
 class BaseSearchTool(ABC):
     """搜索工具基础类，为各种搜索实现提供通用功能"""
     
-    def __init__(self, cache_dir: str = "./.cache/search"):
+    def __init__(self, cache_dir: str = str(PROJECT_ROOT / ".cache/search")):
         """
         初始化搜索工具
         

@@ -16,7 +16,8 @@ from backend.config.prompts import (
 )
 from backend.config.settings import (
     entity_types,
-    relationship_types
+    relationship_types,
+    PROJECT_ROOT,
 )
 from backend.config.prompts import RELEVANT_EXTRACTION_PROMPT
 from backend.search.tool.reasoning.prompts import kb_prompt
@@ -97,7 +98,7 @@ class DeeperResearchTool:
         
         # 缓存设置
         self.enable_cache = True
-        self.cache_dir = "./.cache/deeper_research"
+        self.cache_dir = str(PROJECT_ROOT / ".cache/deeper_research")
         
         # 确保缓存目录存在
         if not os.path.exists(self.cache_dir):

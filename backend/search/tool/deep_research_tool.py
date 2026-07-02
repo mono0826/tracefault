@@ -19,7 +19,7 @@ from backend.search.tool.reasoning.prompts import kb_prompt
 from backend.search.tool.reasoning.thinking import ThinkingEngine
 from backend.search.tool.reasoning.validator import AnswerValidator
 from backend.search.tool.reasoning.search import DualPathSearcher, QueryGenerator
-from backend.config.settings import KB_NAME
+from backend.config.settings import KB_NAME, PROJECT_ROOT
 
 
 class DeepResearchTool(BaseSearchTool):
@@ -36,7 +36,7 @@ class DeepResearchTool(BaseSearchTool):
     
     def __init__(self):
         """初始化深度研究工具"""
-        super().__init__(cache_dir="./.cache/deep_research")
+        super().__init__(cache_dir=str(PROJECT_ROOT / ".cache/deep_research"))
 
         # 关键词缓存
         self._keywords_cache = {}

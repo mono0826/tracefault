@@ -46,7 +46,7 @@ class KnowledgeGraphProcessor:
                 # 检查是否已有图谱数据，没有则自动切到全量构建
                 try:
                     from backend.config.neo4jdb import get_db_manager
-                    r = get_db_manager().graph.query("MATCH (e:__Entity__) RETURN count(e) AS c")
+                    r = get_db_manager().graph.query("MATCH (n) RETURN count(n) AS c")
                     has_graph = r and r[0].get("c", 0) > 0
                 except Exception:
                     has_graph = False
@@ -64,10 +64,10 @@ class KnowledgeGraphProcessor:
             raise
 
     def has_graph(self) -> bool:
-        """检查是否已构建知识图谱"""
+        """检查是否已构建知识图谱（不依赖具体标签名，避免在空库时产生 UnknownLabelWarning）"""
         try:
             from backend.config.neo4jdb import get_db_manager
-            r = get_db_manager().graph.query("MATCH (e:__Entity__) RETURN count(e) AS c LIMIT 1")
+            r = get_db_manager().graph.query("MATCH (n) RETURN count(n) AS c LIMIT 1")
             return r and r[0].get("c", 0) > 0
         except Exception:
             return False

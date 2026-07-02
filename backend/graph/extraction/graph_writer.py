@@ -18,7 +18,7 @@ class GraphWriter:
     def __init__(self, graph: Neo4jGraph = None, batch_size: int = 50, max_workers: int = 4):
         """
         初始化图写入器
-        
+
         Args:
             graph: Neo4j图数据库对象，如果为None则使用连接管理器获取
             batch_size: 批处理大小
@@ -27,10 +27,10 @@ class GraphWriter:
         self.graph = graph or connection_manager.get_connection()
         self.batch_size = batch_size or DEFAULT_BATCH_SIZE
         self.max_workers = max_workers or DEFAULT_MAX_WORKERS
-        
+
         # 节点缓存，用于减少重复节点的创建
         self.node_cache = {}
-        
+
         # 用于跟踪已经处理的节点，减少重复操作
         self.processed_nodes: Set[str] = set()
         
@@ -46,8 +46,11 @@ class GraphWriter:
         Returns:
             GraphDocument: 转换后的图文档对象
         """
-        node_pattern = re.compile(r'\("entity"\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*\)')
-        relationship_pattern = re.compile(r'\("relationship"\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*([^:]+?)\s*\)')
+        # LLM 输出格式为：
+        #   (entity : name : type : desc : confidence)
+        #   (relationship : src : tgt : type : desc : confidence)
+        node_pattern = re.compile(r'\(entity\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*\)')
+        relationship_pattern = re.compile(r'\(relationship\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*:\s*(.*?)\s*\)')
 
         nodes = {}
         relationships = []
@@ -56,7 +59,8 @@ class GraphWriter:
         try:
             # 解析节点 - 使用缓存提高效率
             for match in node_pattern.findall(result):
-                node_id, node_type, description = [s.strip('"\'') for s in match]
+                # (entity : name : type : desc : confidence)
+                node_id, node_type, description, confidence = [s.strip('"\'') for s in match]
                 # 检查节点缓存
                 if node_id in self.node_cache:
                     nodes[node_id] = self.node_cache[node_id]
@@ -64,14 +68,18 @@ class GraphWriter:
                     new_node = Node(
                         id=node_id,
                         type=node_type,
-                        properties={'description': description}
+                        properties={
+                            'description': description,
+                            'confidence': confidence,
+                        }
                     )
                     nodes[node_id] = new_node
                     self.node_cache[node_id] = new_node
 
             # 解析关系
             for match in relationship_pattern.findall(result):
-                source_id, target_id, rel_type, description, weight = [s.strip('"\'') for s in match]
+                # (relationship : src : tgt : type : desc : confidence)
+                source_id, target_id, rel_type, description, confidence = [s.strip('"\'') for s in match]
                 # 确保源节点存在，先检查缓存
                 if source_id not in nodes:
                     if source_id in self.node_cache:
@@ -84,7 +92,7 @@ class GraphWriter:
                         )
                         nodes[source_id] = new_node
                         self.node_cache[source_id] = new_node
-                        
+
                 # 确保目标节点存在，先检查缓存
                 if target_id not in nodes:
                     if target_id in self.node_cache:
@@ -97,11 +105,7 @@ class GraphWriter:
                         )
                         nodes[target_id] = new_node
                         self.node_cache[target_id] = new_node
-                    
-                try:
-                    w = float(weight.strip('"\''))
-                except ValueError:
-                    w = 1.0
+
                 relationships.append(
                     Relationship(
                         source=nodes[source_id],
@@ -109,7 +113,7 @@ class GraphWriter:
                         type=rel_type,
                         properties={
                             "description": description,
-                            "weight": w,
+                            "weight": 1.0,
                         }
                     )
                 )

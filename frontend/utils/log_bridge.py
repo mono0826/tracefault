@@ -36,7 +36,10 @@ class PipelineLogWriter:
             line, self._buffer = self._buffer.split("\n", 1)
             cleaned = _clean_line(line)
             if cleaned:
-                self._on_log(cleaned)
+                try:
+                    self._on_log(cleaned)
+                except Exception:
+                    pass  # Streamlit 会话已结束，忽略
         return len(text)
 
     def flush(self) -> None:

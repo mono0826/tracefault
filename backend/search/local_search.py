@@ -73,7 +73,18 @@ class LocalSearch:
         self.neo4j_uri = db_manager.neo4j_uri
         self.neo4j_username = db_manager.neo4j_username
         self.neo4j_password = db_manager.neo4j_password
-        
+
+    def _graph_exists(self) -> bool:
+        """检查图谱是否已构建（标签无关查询，避免 UnknownLabelWarning）"""
+        try:
+            df = self.driver.execute_query(
+                "MATCH (n) RETURN count(n) AS cnt",
+                result_transformer_=Result.to_df,
+            )
+            return not df.empty and df.iloc[0, 0] > 0
+        except Exception:
+            return False
+
     def _init_community_weights(self):
         """初始化Neo4j中社区节点的权重"""
         self.db_query("""
@@ -194,15 +205,18 @@ class LocalSearch:
         返回:
             str: 生成的最终答案
         """
+        if not self._graph_exists():
+            return "知识图谱尚未构建，请先在「知识库管理」页面中构建图谱后再提问。"
+
         # 初始化对话提示模板
         prompt = ChatPromptTemplate.from_messages([
             ("system", LC_SYSTEM_PROMPT),
             ("human", LOCAL_SEARCH_CONTEXT_PROMPT),
         ])
-        
+
         # 创建搜索链
         chain = prompt | self.llm | StrOutputParser()
-        
+
         vector_search_start = time.time()
         # 初始化向量存储
         vector_store = Neo4jVector.from_existing_index(
@@ -243,6 +257,50 @@ class LocalSearch:
         
         return response
         
+    def search_stream(self, query: str):
+        """流式搜索 — 逐 token 产出 LLM 回复，而非一次性返回。
+
+        与 search() 的检索逻辑完全一致，仅生成阶段使用 chain.stream()。
+        """
+        if not self._graph_exists():
+            yield "知识库尚未构建，请先在「知识库管理」页面中构建图谱后再提问。如需使用通用型问答，请切换到通用型问答模式。"
+            return
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", LC_SYSTEM_PROMPT),
+            ("human", LOCAL_SEARCH_CONTEXT_PROMPT),
+        ])
+
+        chain = prompt | self.llm | StrOutputParser()
+
+        vector_store = Neo4jVector.from_existing_index(
+            self.embeddings,
+            url=self.neo4j_uri,
+            username=self.neo4j_username,
+            password=self.neo4j_password,
+            index_name=self.index_name,
+            retrieval_query=self.retrieval_query,
+        )
+
+        docs = vector_store.similarity_search(
+            query,
+            k=self.top_entities,
+            params={
+                "topChunks": self.top_chunks,
+                "topCommunities": self.top_communities,
+                "topOutsideRels": self.top_outside_rels,
+                "topInsideRels": self.top_inside_rels,
+            },
+        )
+
+        stream = chain.stream({
+            "context": docs[0].page_content if docs else "",
+            "input": query,
+            "response_type": self.response_type,
+        })
+
+        yield from stream
+
     def close(self):
         """关闭Neo4j驱动连接"""
         pass

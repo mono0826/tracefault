@@ -1,5 +1,6 @@
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import List
 
@@ -13,6 +14,8 @@ os.environ.setdefault("HF_HUB_OFFLINE", "1")
 # 屏蔽 transformers / huggingface 的杂音警告
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+# transformers 的 __path__ 警告走 Python warnings 而非 logging，单独过滤
+warnings.filterwarnings("ignore", message="Accessing `__path__`")
 
 from langchain_openai import ChatOpenAI
 from sentence_transformers import SentenceTransformer

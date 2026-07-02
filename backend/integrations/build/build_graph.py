@@ -16,8 +16,6 @@ from backend.config.prompts import (
     human_template_build_graph
 )
 from backend.config.settings import (
-    entity_types,
-    relationship_types,
     theme,
     FILES_DIR,
     CHUNK_SIZE,
@@ -29,6 +27,7 @@ from backend.pipelines.document_processor import DocumentProcessor
 from backend.graph import GraphStructureBuilder
 from backend.graph import EntityRelationExtractor
 from backend.graph import GraphWriter
+from backend.graph.extraction.entity_deduplicator import EntityDeduplicator
 
 import shutup
 shutup.please()
@@ -104,8 +103,6 @@ class KnowledgeGraphBuilder:
                 self.llm,
                 system_template_build_graph,
                 human_template_build_graph,
-                entity_types,
-                relationship_types,
                 max_workers=MAX_WORKERS,
                 batch_size=LLM_BATCH_SIZE,  # 每个 LLM 请求合并的 chunk 数量
             )
@@ -241,6 +238,11 @@ class KnowledgeGraphBuilder:
                         progress_callback
                     )
                 
+                # -- 实体预去重 --
+                dedupor = EntityDeduplicator(similarity_threshold=0.7, min_confidence=0.6)
+                processed_file_contents = dedupor.deduplicate(processed_file_contents)
+                dedupor.print_stats()
+
                 # 将处理结果合并回文档数据
                 file_content_map = {}
                 for processed_file in processed_file_contents:
@@ -272,7 +274,8 @@ class KnowledgeGraphBuilder:
             
             # 检查是否提取到实体（验证数据中是否包含实体标记）
             has_entities = any(
-                '("entity"' in str(data) for doc in self.processed_documents
+                '("entity"' in str(data) or '(entity ' in str(data)
+                for doc in self.processed_documents
                 if doc.get("entity_data") and isinstance(doc["entity_data"], list)
                 for data in doc["entity_data"]
             )

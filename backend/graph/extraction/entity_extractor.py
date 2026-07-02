@@ -11,7 +11,7 @@ from langchain.prompts import (
 )
 
 from backend.graph.core import retry, generate_hash
-from backend.config.settings import MAX_WORKERS as DEFAULT_MAX_WORKERS, BATCH_SIZE as DEFAULT_BATCH_SIZE
+from backend.config.settings import MAX_WORKERS as DEFAULT_MAX_WORKERS, BATCH_SIZE as DEFAULT_BATCH_SIZE, PROJECT_ROOT
 from backend.pipelines.models import Chunk
 
 
@@ -21,9 +21,8 @@ class EntityRelationExtractor:
     使用LLM分析文本块，生成结构化的实体和关系数据。
     """
     
-    def __init__(self, llm, system_template, human_template, 
-             entity_types: List[str], relationship_types: List[str],
-             cache_dir="./.cache/graph", max_workers=4, batch_size=5):
+    def __init__(self, llm, system_template, human_template,
+             cache_dir=str(PROJECT_ROOT / ".cache/graph"), max_workers=4, batch_size=5):
         """
         初始化实体关系提取器
         
@@ -31,15 +30,11 @@ class EntityRelationExtractor:
             llm: 语言模型
             system_template: 系统提示模板
             human_template: 用户提示模板
-            entity_types: 实体类型列表
-            relationship_types: 关系类型列表
             cache_dir: 缓存目录
             max_workers: 并行工作线程数
             batch_size: 批处理大小
         """
         self.llm = llm
-        self.entity_types = entity_types
-        self.relationship_types = relationship_types
         
         # 创建提示模板
         system_message_prompt = SystemMessagePromptTemplate.from_template(system_template)
@@ -172,7 +167,9 @@ class EntityRelationExtractor:
                             if progress_callback:
                                 progress_callback(i)
                         except Exception as exc:
+                            import traceback
                             print(f'Chunk {chunks[i].chunk_id} 处理异常: {exc}')
+                            traceback.print_exc()
                             retry_count = 0
                             while retry_count < 3:
                                 try:
@@ -240,8 +237,6 @@ class EntityRelationExtractor:
 
                 try:
                     batch_response = self.chain.invoke({
-                        "entity_types": self.entity_types,
-                        "relationship_types": self.relationship_types,
                         "input_text": batch_text,
                     })
 
@@ -306,8 +301,6 @@ class EntityRelationExtractor:
         """
         _t0 = time.time()
         response = self.chain.invoke({
-            "entity_types": self.entity_types,
-            "relationship_types": self.relationship_types,
             "input_text": chunk.content,
         })
         _dt = time.time() - _t0

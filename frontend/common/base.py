@@ -51,12 +51,13 @@ def run_pipeline_ui(
         return
 
     reset_pipeline_state()
+    st.session_state.kg_pipeline_running = True
     if terminal_placeholder is None:
         st.markdown("---")
         terminal_placeholder = st.empty()
 
     terminal_placeholder.markdown(
-        _format_terminal_html([], st.session_state.get("kg_pipeline_status", "正在启动...")),
+        _format_terminal_html([], st.session_state.get("kg_pipeline_status", "正在启动..."), running=True),
         unsafe_allow_html=True,
     )
 
@@ -70,15 +71,19 @@ def run_pipeline_ui(
         progress_bar, terminal_placeholder, logs, steps_placeholder,
     )
 
-    result = run_pipeline(
-        file_paths=document_paths,
-        directory_path=directory_path,
-        on_status=on_status,
-        on_log=on_log,
-        on_step_start=on_step_start,
-        on_step_end=on_step_end,
-        incremental=incremental,
-    )
+    result = {"success": False, "error": None, "stats": {}}
+    try:
+        result = run_pipeline(
+            file_paths=document_paths,
+            directory_path=directory_path,
+            on_status=on_status,
+            on_log=on_log,
+            on_step_start=on_step_start,
+            on_step_end=on_step_end,
+            incremental=incremental,
+        )
+    finally:
+        st.session_state.kg_pipeline_running = False
 
     final_msg = "构建完成" if result["success"] else "构建失败"
     st.session_state.kg_pipeline_status = final_msg
@@ -87,7 +92,7 @@ def run_pipeline_ui(
         with steps_placeholder.container():
             render_pipeline_progress()
     terminal_placeholder.markdown(
-        _format_terminal_html(logs, final_msg),
+        _format_terminal_html(logs, final_msg, running=False),
         unsafe_allow_html=True,
     )
 

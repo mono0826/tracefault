@@ -757,6 +757,38 @@ def custom_css(active_nav_key: str = "nav_chat"):
         padding: 8px 16px; background: #1e293b; border-top: 1px solid #334155;
         color: #38bdf8; font-size: 12px;
     }
+    .terminal-status-running {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .terminal-active-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px dashed rgba(148, 163, 184, 0.25);
+        color: #94a3b8;
+        font-size: 12px;
+    }
+    .terminal-prompt {
+        color: #22c55e;
+        font-weight: 600;
+    }
+    .terminal-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(148, 163, 184, 0.25);
+        border-top-color: #38bdf8;
+        border-radius: 50%;
+        animation: terminal-spin 0.75s linear infinite;
+        flex-shrink: 0;
+        box-sizing: border-box;
+    }
+    @keyframes terminal-spin {
+        to { transform: rotate(360deg); }
+    }
 
     .stTabs [data-baseweb="tab-list"] { border-bottom: 1px solid var(--ind-border); }
     .stTabs [data-baseweb="tab"] { color: var(--ind-text-muted); font-weight: 500; }

@@ -25,6 +25,7 @@ def init_pipeline_state():
     st.session_state.setdefault("kg_pipeline_status", "就绪 — 选择输入源后点击「开始构建」")
     st.session_state.setdefault("kg_pipeline_step_states", defaults)
     st.session_state.setdefault("kg_pipeline_current", None)
+    st.session_state.setdefault("kg_pipeline_running", False)
 
 
 def reset_pipeline_state():
@@ -32,6 +33,7 @@ def reset_pipeline_state():
     st.session_state.kg_pipeline_status = "正在启动..."
     st.session_state.kg_pipeline_step_states = {s["id"]: "pending" for s in PIPELINE_STEPS}
     st.session_state.kg_pipeline_current = None
+    st.session_state.kg_pipeline_running = False
 
 
 def set_step_state(step_id: str, state: str):
@@ -70,8 +72,37 @@ def render_pipeline_progress():
         )
 
 
-def _format_terminal_html(logs: list[str], status: str) -> str:
-    body = "\n".join(logs) if logs else "$ waiting for pipeline start..."
+def _terminal_active_line(status: str) -> str:
+    return (
+        '<div class="terminal-active-line">'
+        '<span class="terminal-prompt">$</span>'
+        '<span class="terminal-spinner"></span>'
+        f'<span class="terminal-active-text">{html.escape(status)}</span>'
+        "</div>"
+    )
+
+
+def _format_terminal_html(logs: list[str], status: str, *, running: bool = False) -> str:
+    if logs:
+        body = html.escape("\n".join(logs))
+    elif running:
+        body = ""
+    else:
+        body = html.escape("$ waiting for pipeline start...")
+
+    if running:
+        body += _terminal_active_line(status or "构建进行中...")
+
+    if running:
+        status_html = (
+            '<span class="terminal-status-running">'
+            '<span class="terminal-spinner"></span>'
+            f"&gt;&gt;&gt; {html.escape(status)}"
+            "</span>"
+        )
+    else:
+        status_html = f"&gt;&gt;&gt; {html.escape(status)}"
+
     return (
         f'<div class="terminal-panel" style="width:100%;min-height:560px;display:flex;flex-direction:column;">'
         f'<div class="terminal-header">'
@@ -79,12 +110,12 @@ def _format_terminal_html(logs: list[str], status: str) -> str:
         f'<span class="terminal-dot yellow"></span>'
         f'<span class="terminal-dot green"></span>'
         f'<span class="terminal-title">build.log</span>'
-        f'</div>'
+        f"</div>"
         f'<div class="terminal-body" style="flex:1;min-height:480px;max-height:72vh;overflow-y:auto;">'
-        f'{html.escape(body)}'
-        f'</div>'
-        f'<div class="terminal-status">&gt;&gt;&gt; {html.escape(status)}</div>'
-        f'</div>'
+        f"{body}"
+        f"</div>"
+        f'<div class="terminal-status">{status_html}</div>'
+        f"</div>"
     )
 
 
@@ -92,7 +123,8 @@ def render_terminal_panel():
     """右侧：终端风格日志（静态，读取 session_state）"""
     logs = st.session_state.get("kg_pipeline_logs", [])
     status = st.session_state.get("kg_pipeline_status", "就绪")
-    st.markdown(_format_terminal_html(logs, status), unsafe_allow_html=True)
+    running = st.session_state.get("kg_pipeline_running", False)
+    st.markdown(_format_terminal_html(logs, status, running=running), unsafe_allow_html=True)
 
 
 def make_pipeline_callbacks(progress_bar, terminal_placeholder, logs: list, steps_placeholder=None):
@@ -103,7 +135,11 @@ def make_pipeline_callbacks(progress_bar, terminal_placeholder, logs: list, step
             with steps_placeholder.container():
                 render_pipeline_progress()
         terminal_placeholder.markdown(
-            _format_terminal_html(logs, st.session_state.get("kg_pipeline_status", "")),
+            _format_terminal_html(
+                logs,
+                st.session_state.get("kg_pipeline_status", ""),
+                running=st.session_state.get("kg_pipeline_running", False),
+            ),
             unsafe_allow_html=True,
         )
 

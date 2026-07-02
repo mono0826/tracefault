@@ -164,6 +164,7 @@ with tab_graph:
         _format_terminal_html(
             st.session_state.get("kg_pipeline_logs", []),
             st.session_state.get("kg_pipeline_status", "就绪 — 选择输入源后点击「开始构建」"),
+            running=st.session_state.get("kg_pipeline_running", False),
         ),
         unsafe_allow_html=True,
     )

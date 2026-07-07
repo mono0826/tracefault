@@ -184,13 +184,7 @@ cp .env.example .env
 # 编辑 .env: 填入 LLM API Key、Neo4j 连接信息等
 ```
 
-### 4. 初始化数据库
-
-```bash
-python scripts/init_db.py
-```
-
-### 5. 启动前端
+### 4. 启动前端
 
 ```bash
 streamlit run frontend/main.py

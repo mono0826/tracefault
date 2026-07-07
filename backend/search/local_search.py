@@ -39,7 +39,7 @@ class LocalSearch:
     def __init__(self, llm, embeddings, response_type: str = "多个段落"):
         """
         初始化本地搜索类
-        
+
         参数:
             llm: 大语言模型实例
             embeddings: 向量嵌入模型
@@ -49,11 +49,11 @@ class LocalSearch:
         self.llm = llm
         self.embeddings = embeddings
         self.response_type = response_type
-        
+
         # 获取数据库连接管理器
         db_manager = get_db_manager()
         self.driver = db_manager.get_driver()
-        
+
         # 设置检索参数
         self.top_chunks = LOCAL_SEARCH_SETTINGS["top_chunks"]
         self.top_communities = LOCAL_SEARCH_SETTINGS["top_communities"]
@@ -65,14 +65,31 @@ class LocalSearch:
         ]
         self.top_entities = LOCAL_SEARCH_SETTINGS["top_entities"]
         self.index_name = LOCAL_SEARCH_SETTINGS["index_name"]
-        
+
         # 初始化社区节点权重
         self._init_community_weights()
-        
+
         # 配置Neo4j URI和认证信息
         self.neo4j_uri = db_manager.neo4j_uri
         self.neo4j_username = db_manager.neo4j_username
         self.neo4j_password = db_manager.neo4j_password
+
+        # --- 初始化对话提示模板和搜索链（一次性创建）---
+        self._prompt = ChatPromptTemplate.from_messages([
+            ("system", LC_SYSTEM_PROMPT),
+            ("human", LOCAL_SEARCH_CONTEXT_PROMPT),
+        ])
+        self._chain = self._prompt | self.llm | StrOutputParser()
+
+        # --- 初始化向量存储（一次性创建）---
+        self._vector_store = Neo4jVector.from_existing_index(
+            self.embeddings,
+            url=self.neo4j_uri,
+            username=self.neo4j_username,
+            password=self.neo4j_password,
+            index_name=self.index_name,
+            retrieval_query=self.retrieval_query,
+        )
 
     def _graph_exists(self) -> bool:
         """检查图谱是否已构建（标签无关查询，避免 UnknownLabelWarning）"""
@@ -166,32 +183,8 @@ class LocalSearch:
         """
     
     def as_retriever(self, **kwargs):
-        """
-        返回检索器实例，用于链式调用
-        
-        返回:
-            检索器实例
-        """
-        # 生成包含所有检索参数的查询
-        final_query = self.retrieval_query.replace("$topChunks", str(self.top_chunks))\
-            .replace("$topCommunities", str(self.top_communities))\
-            .replace("$topOutsideRels", str(self.top_outside_rels))\
-            .replace("$topInsideRels", str(self.top_inside_rels))
-
-        db_manager = get_db_manager()
-        
-        # 初始化向量存储
-        vector_store = Neo4jVector.from_existing_index(
-            self.embeddings,
-            url=db_manager.neo4j_uri,
-            username=db_manager.neo4j_username,
-            password=db_manager.neo4j_password,
-            index_name=self.index_name,
-            retrieval_query=final_query
-        )
-        
-        # 返回检索器
-        return vector_store.as_retriever(
+        """返回检索器实例，用于链式调用。"""
+        return self._vector_store.as_retriever(
             search_kwargs={"k": self.top_entities}
         )
         
@@ -208,28 +201,9 @@ class LocalSearch:
         if not self._graph_exists():
             return "知识图谱尚未构建，请先在「知识库管理」页面中构建图谱后再提问。"
 
-        # 初始化对话提示模板
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", LC_SYSTEM_PROMPT),
-            ("human", LOCAL_SEARCH_CONTEXT_PROMPT),
-        ])
-
-        # 创建搜索链
-        chain = prompt | self.llm | StrOutputParser()
-
         vector_search_start = time.time()
-        # 初始化向量存储
-        vector_store = Neo4jVector.from_existing_index(
-            self.embeddings,
-            url=self.neo4j_uri,
-            username=self.neo4j_username,
-            password=self.neo4j_password,
-            index_name=self.index_name,
-            retrieval_query=self.retrieval_query
-        )
-        
         # 执行相似度搜索
-        docs = vector_store.similarity_search(
+        docs = self._vector_store.similarity_search(
             query,
             k=self.top_entities,
             params={
@@ -247,14 +221,14 @@ class LocalSearch:
                 print(f"--- doc[{i}] ---")
                 print(doc.page_content if hasattr(doc, 'page_content') else doc)
                 print()
-        
+
         # 使用LLM生成响应
-        response = chain.invoke({
+        response = self._chain.invoke({
             "context": docs[0].page_content if docs else "",
             "input": query,
             "response_type": self.response_type
         })
-        
+
         return response
         
     def search_stream(self, query: str):
@@ -266,23 +240,7 @@ class LocalSearch:
             yield "知识库尚未构建，请先在「知识库管理」页面中构建图谱后再提问。如需使用通用型问答，请切换到通用型问答模式。"
             return
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", LC_SYSTEM_PROMPT),
-            ("human", LOCAL_SEARCH_CONTEXT_PROMPT),
-        ])
-
-        chain = prompt | self.llm | StrOutputParser()
-
-        vector_store = Neo4jVector.from_existing_index(
-            self.embeddings,
-            url=self.neo4j_uri,
-            username=self.neo4j_username,
-            password=self.neo4j_password,
-            index_name=self.index_name,
-            retrieval_query=self.retrieval_query,
-        )
-
-        docs = vector_store.similarity_search(
+        docs = self._vector_store.similarity_search(
             query,
             k=self.top_entities,
             params={
@@ -293,7 +251,7 @@ class LocalSearch:
             },
         )
 
-        stream = chain.stream({
+        stream = self._chain.stream({
             "context": docs[0].page_content if docs else "",
             "input": query,
             "response_type": self.response_type,

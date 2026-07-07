@@ -1,5 +1,6 @@
 """全局 Session State 初始化"""
 
+import uuid
 import streamlit as st
 
 from frontend.utils.helpers import generate_session_id
@@ -40,3 +41,28 @@ def init_session_state():
         st.session_state.fault_severity = "未指定"
     if "pending_prompt" not in st.session_state:
         st.session_state.pending_prompt = None
+
+
+def cancel_pending_chat_generation(*, append_partial: bool = True) -> bool:
+    """取消进行中的回答生成，释放输入锁；可选保留已流式输出的片段"""
+    if not st.session_state.get("processing_lock") and not st.session_state.get("_gen_assistant"):
+        return False
+
+    partial = (st.session_state.pop("_stream_partial", None) or "").strip()
+    st.session_state.pop("_gen_assistant", None)
+    st.session_state.processing_lock = False
+
+    if append_partial and partial:
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": partial,
+            "message_id": str(uuid.uuid4()),
+        })
+    return True
+
+
+def reconcile_processing_lock():
+    """修正因 rerun 中断而遗留的 processing_lock"""
+    if st.session_state.get("processing_lock") and not st.session_state.get("_gen_assistant"):
+        st.session_state.processing_lock = False
+        st.session_state.pop("_stream_partial", None)

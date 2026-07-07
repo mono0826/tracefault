@@ -1,0 +1,5 @@
+[client]
+# 本地开发时默认 toolbarMode=auto 会显示 Clear cache / Rerun 等开发者菜单，
+# 用户在聊天区选中文本复制时容易误点右上角 ⋮ 菜单触发确认弹窗。
+toolbarMode = "viewer"
+showSidebarNavigation = false

@@ -2,7 +2,7 @@ services:
   neo4j:
     image: neo4j-with-gds:5.22.0
     ports:
-      - "7474:7474"
+      - "17474:7474"
       - "7687:7687"
     environment:
       NEO4J_AUTH: "neo4j/12345678"

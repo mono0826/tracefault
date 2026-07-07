@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from backend.models.get_models import get_llm_model
 from backend.intent_recognition.models import IntentType, IntentResult
@@ -28,15 +28,30 @@ INTENT_SYSTEM_PROMPT = (
 )
 
 
+def _format_history(history: Optional[List[dict]]) -> str:
+    """将历史消息列表格式化为文本"""
+    if not history:
+        return ""
+    lines = []
+    for m in history:
+        role = "用户" if m.get("role") == "user" else "助手"
+        content = (m.get("content") or "").strip()
+        if content:
+            lines.append(f"{role}: {content}")
+    return "\n".join(lines)
+
+
 def classify_intent(
     query: str,
+    history: Optional[List[dict]] = None,
     llm=None,
 ) -> IntentResult:
     """
-    对用户 query 进行意图分类。
+    对用户 query 进行意图分类（考虑历史上下文）。
 
     Args:
         query: 用户输入文本
+        history: 可选的历史消息列表
         llm: 可选的 LLM 实例，不传则自动创建
 
     Returns:
@@ -52,10 +67,16 @@ def classify_intent(
 
     _llm = llm or get_llm_model()
 
+    # 构建带上下文的输入
+    user_input = f"用户输入：{query.strip()}"
+    history_text = _format_history(history)
+    if history_text:
+        user_input = f"对话历史：\n{history_text}\n\n{user_input}"
+
     try:
         resp = _llm.invoke([
             ("system", INTENT_SYSTEM_PROMPT),
-            ("human", f"用户输入：{query.strip()}"),
+            ("human", user_input),
         ])
         content = resp.content.strip()
         # 提取 JSON（防止 LLM 额外输出）

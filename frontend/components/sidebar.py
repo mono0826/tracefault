@@ -3,13 +3,18 @@
 import streamlit as st
 
 from frontend.common.constants import AGENT_OPTIONS, AGENT_DESCRIPTIONS
+from frontend.common.session import cancel_pending_chat_generation
 from frontend.utils.api_client import (
     clear_chat,
     list_chat_sessions,
     load_chat_session,
     delete_chat_session,
     start_new_chat_session,
+    persist_session_agent_type,
+    restore_session_agent_type,
 )
+
+_AGENT_RADIO_KEY = "agent_type_radio"
 
 
 def _apply_pending_agent_type():
@@ -17,6 +22,26 @@ def _apply_pending_agent_type():
     pending = st.session_state.pop("_pending_agent_type", None)
     if pending is not None:
         st.session_state.agent_type = pending
+        st.session_state[_AGENT_RADIO_KEY] = pending
+
+
+def _sync_agent_radio_from_state():
+    """渲染 radio 前同步 widget 值，避免切页后 widget 重置为默认项"""
+    val = st.session_state.get("agent_type", "general_agent")
+    if val not in AGENT_OPTIONS:
+        val = "general_agent"
+        st.session_state.agent_type = val
+    st.session_state[_AGENT_RADIO_KEY] = val
+
+
+def _on_agent_type_change():
+    selected = st.session_state.get(_AGENT_RADIO_KEY, "general_agent")
+    if selected not in AGENT_OPTIONS:
+        selected = "general_agent"
+    if st.session_state.get("processing_lock"):
+        cancel_pending_chat_generation(append_partial=True)
+    st.session_state.agent_type = selected
+    persist_session_agent_type(selected)
 
 
 def _css_content(text: str) -> str:
@@ -24,8 +49,7 @@ def _css_content(text: str) -> str:
 
 
 def _render_agent_selector():
-    if st.session_state.get("agent_type") not in AGENT_OPTIONS:
-        st.session_state.agent_type = "general_agent"
+    _sync_agent_radio_from_state()
 
     st.markdown('<div class="ind-section-label">问答模式</div>', unsafe_allow_html=True)
     tip_rules = []
@@ -43,7 +67,8 @@ def _render_agent_selector():
         "问答模式",
         options=list(AGENT_OPTIONS.keys()),
         format_func=lambda k: AGENT_OPTIONS[k],
-        key="agent_type",
+        key=_AGENT_RADIO_KEY,
+        on_change=_on_agent_type_change,
         label_visibility="collapsed",
     )
 
@@ -196,6 +221,7 @@ def display_sidebar():
         st.markdown("</div>", unsafe_allow_html=True)
 
         _apply_pending_agent_type()
+        restore_session_agent_type()
         _render_agent_selector()
 
         _render_history_list()

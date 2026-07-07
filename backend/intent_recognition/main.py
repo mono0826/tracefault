@@ -90,6 +90,7 @@ def process_query(
         }
 
     _log(f"输入: {query}")
+    print(f"[意图识别] 输入: {query}")
 
     # ---------------------------------------------------------------
     # Layer 1: 规则术语归一化
@@ -100,12 +101,12 @@ def process_query(
         _log(f"术语归一化: {query} → {normalized}")
     else:
         _log("术语归一化: 无变化")
-
+    print(f"[意图识别] 术语归一化: {query} → {normalized}")
     # ---------------------------------------------------------------
-    # Layer 2: 意图分类
+    # Layer 2: 意图分类（带历史上下文）
     # ---------------------------------------------------------------
-    intent = classify_intent(normalized, llm=_llm)
-
+    intent = classify_intent(normalized, history=history, llm=_llm)
+    print(f"[意图识别] 意图分类: {intent.intent} (置信度={intent.confidence:.2f})")
     # 闲聊意图标记，不需要改写
     if intent.intent == IntentType.CASUAL_CHAT:
         _log(f"意图分类: casual_chat (置信度={intent.confidence:.2f})")

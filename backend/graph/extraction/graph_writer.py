@@ -9,12 +9,27 @@ from backend.graph.core import connection_manager
 from backend.config.settings import BATCH_SIZE as DEFAULT_BATCH_SIZE, MAX_WORKERS as DEFAULT_MAX_WORKERS
 from backend.pipelines.models import Chunk
 
+# 占位/无意义实体名称集合，这些名称不应被写入图谱
+_PLACEHOLDER_NAMES = frozenset({
+    "无", "none", "null", "nil", "n/a", "na", "-", "--", "未知", "unknown",
+    "", " ", "无具体描述", "无描述", "无信息", "无数据",
+})
+
+
+def _is_valid_entity_name(name: str) -> bool:
+    """检查实体名称是否有效（非占位符）。"""
+    stripped = name.strip().strip('"\'')
+    if not stripped:
+        return False
+    return stripped.lower() not in _PLACEHOLDER_NAMES
+
+
 class GraphWriter:
     """
     图写入器，负责将提取的实体和关系写入Neo4j图数据库。
     处理实体和关系的解析、转换为GraphDocument，以及批量写入图数据库。
     """
-    
+
     def __init__(self, graph: Neo4jGraph = None, batch_size: int = 50, max_workers: int = 4):
         """
         初始化图写入器
@@ -61,6 +76,9 @@ class GraphWriter:
             for match in node_pattern.findall(result):
                 # (entity : name : type : desc : confidence)
                 node_id, node_type, description, confidence = [s.strip('"\'') for s in match]
+                # skip placeholder entities like "无"/"None"
+                if not _is_valid_entity_name(node_id):
+                    continue
                 # 检查节点缓存
                 if node_id in self.node_cache:
                     nodes[node_id] = self.node_cache[node_id]
@@ -80,6 +98,9 @@ class GraphWriter:
             for match in relationship_pattern.findall(result):
                 # (relationship : src : tgt : type : desc : confidence)
                 source_id, target_id, rel_type, description, confidence = [s.strip('"\'') for s in match]
+                # skip relationships referencing placeholder entities
+                if not _is_valid_entity_name(source_id) or not _is_valid_entity_name(target_id):
+                    continue
                 # 确保源节点存在，先检查缓存
                 if source_id not in nodes:
                     if source_id in self.node_cache:

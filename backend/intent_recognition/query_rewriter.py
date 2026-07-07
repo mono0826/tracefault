@@ -102,6 +102,7 @@ def _llm_rewrite_and_split(
             return None
 
         rewrite = (data.get("rewrite") or "").strip()
+        print(f"LLM 改写结果: {rewrite}")
         if not rewrite:
             return None
 

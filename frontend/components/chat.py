@@ -7,12 +7,22 @@ import traceback
 import streamlit as st
 
 from frontend.common.constants import QUICK_QUESTION
-from frontend.utils.helpers import build_enriched_query, extract_source_ids, sanitize_answer_text
+from frontend.common.session import reconcile_processing_lock
+from frontend.utils.helpers import (
+    build_enriched_query,
+    extract_source_ids,
+    format_source_display_names,
+    format_stream_body,
+    sanitize_answer_text,
+    collect_source_paths,
+    _has_incomplete_citation_tail,
+)
 from frontend.utils.api_client import (
     chat_qa,
     chat_qa_stream,
     send_feedback,
     search_sources,
+    persist_session_agent_type,
 )
 
 
@@ -27,20 +37,57 @@ def _thinking_indicator_html(text: str = "思考中…") -> str:
     )
 
 
-def _stream_with_thinking_indicator(generator, label: str = "思考中…"):
-    """首个 token 到达前显示转圈，开始输出后自动隐藏"""
-    thinking = st.empty()
-    thinking.markdown(_thinking_indicator_html(label), unsafe_allow_html=True)
-    started = False
+def _stream_assistant_response(generator, *, label: str = "思考中…") -> tuple[str, list[str]]:
+    """流式输出正文；引用信息全程缓存，完成后返回供「参考来源」展示"""
+    slot = st.empty()
+    slot.markdown(_thinking_indicator_html(label), unsafe_allow_html=True)
+    parts: list[str] = []
+    saved_sources: list[str] = []
     try:
         for chunk in generator:
-            if not started:
-                thinking.empty()
-                started = True
-            yield chunk
+            text = chunk if isinstance(chunk, str) else str(chunk)
+            parts.append(text)
+            accumulated = "".join(parts)
+            st.session_state._stream_partial = accumulated
+            saved_sources = collect_source_paths(accumulated)
+            st.session_state._pending_sources = saved_sources
+
+            display = format_stream_body(accumulated)
+            if display.strip():
+                slot.markdown(display)
+            elif accumulated.strip() and _has_incomplete_citation_tail(accumulated):
+                slot.markdown(_thinking_indicator_html("整理引用来源…"), unsafe_allow_html=True)
     finally:
-        if not started:
-            thinking.empty()
+        full = "".join(parts)
+        saved_sources = collect_source_paths(full)
+        st.session_state._pending_sources = saved_sources
+        if full.strip():
+            slot.markdown(sanitize_answer_text(full))
+        else:
+            slot.empty()
+    return full, saved_sources
+
+
+def _render_source_expander(
+    display_names: list[str],
+    source_ids: list[str] | None = None,
+    *,
+    key_suffix: str = "",
+):
+    if not display_names:
+        return
+    source_ids = source_ids or display_names
+    with st.expander(f"📎 参考来源 · {len(display_names)}", expanded=False):
+        for name in display_names[:8]:
+            st.markdown(f'<div class="source-ref-box">{html.escape(name)}</div>', unsafe_allow_html=True)
+        if st.session_state.debug_mode:
+            for s_idx, sid in enumerate(source_ids):
+                label = (format_source_display_names([sid])[0] if sid else "")[:12]
+                if st.button(f"查看原文 {label}…", key=f"src_{sid}_{key_suffix}_{s_idx}"):
+                    results = search_sources(sid, top_k=1)
+                    if results:
+                        st.session_state.source_content = results[0]["content"]
+                        st.rerun()
 
 
 def _display_thinking_process(raw_thinking: str):
@@ -131,19 +178,9 @@ def _render_feedback_buttons(msg: dict, i: int):
 def _render_source_references(msg: dict, i: int, raw_content: str):
     source_ids = extract_source_ids(raw_content)
     if msg.get("sources"):
-        source_ids = list(set(source_ids + msg["sources"]))
-    if not source_ids:
-        return
-    with st.expander(f"📎 参考来源 · {len(source_ids)}", expanded=False):
-        for sid in source_ids[:8]:
-            st.markdown(f'<div class="source-ref-box">{sid}</div>', unsafe_allow_html=True)
-        if st.session_state.debug_mode:
-            for s_idx, sid in enumerate(source_ids):
-                if st.button(f"查看原文 {sid[:12]}…", key=f"src_{sid}_{i}_{s_idx}"):
-                    results = search_sources(sid, top_k=1)
-                    if results:
-                        st.session_state.source_content = results[0]["content"]
-                        st.rerun()
+        source_ids = list(dict.fromkeys(source_ids + msg["sources"]))
+    display_names = format_source_display_names(source_ids)
+    _render_source_expander(display_names, source_ids, key_suffix=str(i))
 
 
 def _render_assistant_message(msg: dict, i: int):
@@ -172,14 +209,14 @@ def _render_assistant_message(msg: dict, i: int):
     _render_feedback_buttons(msg, i)
 
 
-def _handle_non_stream_response(api_prompt: str):
+def _handle_non_stream_response(api_prompt: str, agent_type: str):
     with st.chat_message("assistant", avatar="🤖"):
         thinking = st.empty()
         thinking.markdown(_thinking_indicator_html("分析中…"), unsafe_allow_html=True)
         try:
             result = chat_qa(
                 api_prompt,
-                agent_type=st.session_state.agent_type,
+                agent_type=agent_type,
                 session_id=st.session_state.session_id,
                 show_thinking=st.session_state.get("show_thinking", False),
                 use_deeper_tool=st.session_state.get("use_deeper_tool", True),
@@ -189,53 +226,74 @@ def _handle_non_stream_response(api_prompt: str):
         answer = result.get("answer", "抱歉，无法生成回答。")
         display = sanitize_answer_text(answer)
         st.markdown(display)
+        sources = collect_source_paths(answer)
+        if sources:
+            _render_source_expander(sources, extract_source_ids(answer), key_suffix="live_ns")
         if result.get("execution_log"):
             st.session_state.execution_log = result["execution_log"]
         msg_obj = {"role": "assistant", "content": answer, "message_id": str(uuid.uuid4())}
-        if result.get("sources"):
+        if sources:
+            msg_obj["sources"] = sources
+        elif result.get("sources"):
             msg_obj["sources"] = result["sources"]
         st.session_state.messages.append(msg_obj)
 
 
-def _handle_stream_response(display_prompt: str, api_prompt: str):
+def _handle_stream_response(display_prompt: str, api_prompt: str, agent_type: str):
     with st.chat_message("assistant", avatar="🤖"):
         st.session_state.execution_log = [
-            f"[检索] Agent: {st.session_state.agent_type}",
+            f"[检索] Agent: {agent_type}",
             f"[检索] 查询: {display_prompt}",
         ]
         try:
             generator = chat_qa_stream(
                 api_prompt,
-                agent_type=st.session_state.agent_type,
+                agent_type=agent_type,
                 session_id=st.session_state.session_id,
                 history=_chat_history_for_api(),
             )
-            full_response = st.write_stream(
-                _stream_with_thinking_indicator(generator, "思考中…")
-            )
+            label = "检索中…" if agent_type == "intent_rag_agent" else "思考中…"
+            full_response, sources = _stream_assistant_response(generator, label=label)
+            if sources:
+                _render_source_expander(
+                    sources,
+                    extract_source_ids(full_response),
+                    key_suffix="live_stream",
+                )
         except Exception as e:
             full_response = f"生成回答时出错: {e}"
+            sources = []
             st.error(full_response)
         if not full_response:
             full_response = "抱歉，未能生成回答。"
-        st.session_state.messages.append({
+        msg = {
             "role": "assistant",
             "content": full_response,
             "message_id": str(uuid.uuid4()),
-        })
+        }
+        if sources:
+            msg["sources"] = sources
+        st.session_state.messages.append(msg)
+        st.session_state.pop("_pending_sources", None)
 
 
-def _generate_assistant_response(display_prompt: str, api_prompt: str):
+def _generate_assistant_response(gen: dict):
+    display_prompt = gen["display"]
+    api_prompt = gen["api"]
+    agent_type = gen.get("agent_type", st.session_state.get("agent_type", "general_agent"))
+    st.session_state.pop("_stream_partial", None)
     try:
         use_stream = st.session_state.get("use_stream", True) and not st.session_state.debug_mode
         if use_stream:
-            _handle_stream_response(display_prompt, api_prompt)
+            _handle_stream_response(display_prompt, api_prompt, agent_type)
         else:
-            _handle_non_stream_response(api_prompt)
+            _handle_non_stream_response(api_prompt, agent_type)
     except Exception as e:
         st.error(f"处理消息时出错: {str(e)}")
         traceback.print_exc()
     finally:
+        st.session_state.pop("_gen_assistant", None)
+        st.session_state.pop("_stream_partial", None)
         st.session_state.processing_lock = False
     st.rerun()
 
@@ -245,15 +303,18 @@ def _queue_user_message(display_prompt: str):
         st.warning("请等待当前操作完成…")
         return
     st.session_state.processing_lock = True
+    persist_session_agent_type(st.session_state.get("agent_type", "general_agent"))
     st.session_state.messages.append({"role": "user", "content": display_prompt})
     st.session_state._gen_assistant = {
         "display": display_prompt,
         "api": _get_enriched_query(display_prompt),
+        "agent_type": st.session_state.get("agent_type", "general_agent"),
     }
     st.rerun()
 
 
 def display_chat_interface(show_summary_panel: bool = True):
+    reconcile_processing_lock()
     st.markdown('<div class="chat-thread-marker"></div>', unsafe_allow_html=True)
     _, main_col, _ = st.columns([1, 7, 1])
 
@@ -278,9 +339,9 @@ def display_chat_interface(show_summary_panel: bool = True):
         if not st.session_state.messages:
             _render_dock_pills()
 
-        gen = st.session_state.pop("_gen_assistant", None)
+        gen = st.session_state.get("_gen_assistant")
         if gen:
-            _generate_assistant_response(gen["display"], gen["api"])
+            _generate_assistant_response(gen)
 
     pending = st.session_state.pop("pending_prompt", None)
     chat_prompt = st.chat_input("输入故障现象、报警代码或排查问题…")

@@ -223,8 +223,8 @@ class IncrementalGraphUpdater:
                             # content = (file_name, [Chunk, ...], [LLM结果, ...])
                             if len(content) >= 3:
                                 entity_data = content[2]
-                                entity_count = sum(1 for data in entity_data if '("entity"' in str(data))
-                                relation_count = sum(1 for data in entity_data if '("relationship"' in str(data))
+                                entity_count = sum(str(data).count('(entity') for data in entity_data)
+                                relation_count = sum(str(data).count('(relationship') for data in entity_data)
                                 self.console.print(f"[blue]文件 {i+1}: {content[0]}, 抽取了 {entity_count} 个实体和 {relation_count} 个关系[/blue]")
                             else:
                                 self.console.print(f"[yellow]文件 {i+1}: {content[0]}, 没有返回实体数据[/yellow]")
@@ -243,8 +243,8 @@ class IncrementalGraphUpdater:
                                         
                                 if entity_data:
                                     # 估算实体和关系数量
-                                    entity_count = sum(1 for data in entity_data if '("entity"' in str(data))
-                                    relation_count = sum(1 for data in entity_data if '("relationship"' in str(data))
+                                    entity_count = sum(str(data).count('(entity') for data in entity_data)
+                                    relation_count = sum(str(data).count('(relationship') for data in entity_data)
                                     self.console.print(f"[green]文件 {doc['filename']} 中识别出 {entity_count} 个实体和 {relation_count} 个关系[/green]")
                                             
                                     # GraphWriter 期望的格式: (file_name, [Chunk, ...], [LLM结果, ...])

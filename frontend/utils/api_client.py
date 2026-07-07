@@ -139,6 +139,42 @@ def start_new_chat_session():
     st.session_state.source_content = None
 
 
+def persist_session_agent_type(agent_type: str) -> None:
+    """将当前问答模式写入会话 JSON metadata，便于切页后恢复"""
+    if agent_type not in AGENT_OPTIONS:
+        return
+    sid = st.session_state.get("session_id")
+    if not sid:
+        return
+    path = _session_json_path(str(sid))
+    if not path.exists():
+        return
+    try:
+        data = _read_session_json(str(sid))
+        if not data:
+            return
+        data.setdefault("metadata", {})["agent_type"] = agent_type
+        with path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except OSError:
+        pass
+
+
+def restore_session_agent_type() -> None:
+    """从当前会话 JSON 恢复问答模式（切回 Chat 页时使用）"""
+    if st.session_state.get("_pending_agent_type") is not None:
+        return
+    sid = st.session_state.get("session_id")
+    if not sid:
+        return
+    data = _read_session_json(str(sid))
+    if not data:
+        return
+    saved = data.get("metadata", {}).get("agent_type")
+    if saved in AGENT_OPTIONS:
+        st.session_state.agent_type = saved
+
+
 # ===== 问答接口（薄分发层） =====
 
 def _get_agent_fn(agent_type: str):
